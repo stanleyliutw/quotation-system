@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>專業報價單系統 V4 - 銓瑞複材科技</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #1a237e; /* 更加沉穩的深藍色 */
+            --primary-light: #534bae;
+            --secondary-color: #f57c00; /* 暖橘色 */
+            --text-color: #2c3e50;
+            --text-light: #7f8c8d;
+            --bg-color: #f0f2f5;
+            --border-color: #dcdfe6;
+            --white: #ffffff;
+            --accent-blue: #f8fbff;
+            --success-color: #27ae60;
+            --shadow-subtle: 0 4px 12px rgba(0,0,0,0.05);
+            --shadow-medium: 0 8px 24px rgba(0,0,0,0.08);
+        }
+
+        /* A4 標準規格定義 */
+        @page { 
+            size: A4; 
+            margin: 0; 
+        }
+
+        body { 
+            font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif; 
+            background-color: var(--bg-color); 
+            margin: 0; 
+            padding: 30px 0; 
+            color: var(--text-color);
+            -webkit-print-color-adjust: exact;
+            line-height: 1.5;
+        }
+        
+        /* 頂部控制面板 */
+        .btn-area { 
+            text-align: center; 
+            margin-bottom: 40px; 
+            position: sticky; 
+            top: 0; 
+            background: rgba(240, 242, 245, 0.9);
+            backdrop-filter: blur(12px);
+            padding: 20px; 
+            z-index: 1000; 
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .btn { 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            font-size: 14px; 
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: var(--shadow-subtle);
+        }
+
+        .btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: var(--shadow-medium); 
+            filter: brightness(1.1);
+        }
+        .btn:active { transform: translateY(0); }
+
+        .btn-add { background: var(--success-color); color: white; }
+        .btn-save { background: #673ab7; color: white; }
+        .btn-load { background: var(--secondary-color); color: white; }
+        .btn-ics { background: #4285F4; color: white; } /* Google Blue */
+        .btn-print { background: var(--primary-color); color: white; }
+
+        /* A4 容器主體 */
+        .page {
+            background: var(--white);
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 20mm 20mm; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            border-radius: 4px;
+        }
+
+        /* 表頭區域 */
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start;
+            border-bottom: 4px solid var(--primary-color); 
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 24px; }
+
+        .logo-box {
+            width: 140px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        .company-info h1 { margin: 0; color: var(--primary-color); font-size: 24px; letter-spacing: 0.5px; font-weight: 700; }
+        .company-info p { margin: 6px 0; font-size: 13px; color: var(--text-light); }
+
+        .doc-info { text-align: right; }
+        .doc-info h2 { 
+            margin: 0 0 16px 0; 
+            font-size: 38px; 
+            letter-spacing: 14px; 
+            color: var(--primary-color);
+            text-align: right;
+            font-weight: 700;
+            line-height: 1;
+        }
+        
+        .doc-meta { 
+            display: inline-grid;
+            grid-template-columns: auto auto;
+            gap: 8px 12px;
+            background: #fcfdfe;
+            padding: 15px 20px;
+            border-radius: 8px;
+            border: 1px solid #ebf0f5;
+            text-align: left;
+        }
+        
+        .doc-meta div { 
+            display: contents; /* 讓內部的 label 和 input 直接參與 grid 佈局 */
+        }
+        
+        .doc-meta label {
+            font-size: 13px;
+            color: var(--text-light);
+            font-weight: 600;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+        }
+        
+        .doc-meta input { 
+            border: none; 
+            border-bottom: 1.5px solid var(--border-color); 
+            text-align: right; 
+            width: 140px; 
+            font-size: 14px; 
+            outline: none;
+            padding: 2px 4px;
+            color: var(--primary-color);
+            font-weight: 700;
+            background: transparent;
+            transition: all 0.2s;
+        }
+        .doc-meta input:focus { border-color: var(--primary-color); background: #fff; }
+
+        /* 客戶資料區 */
+        .customer-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 30px; 
+            margin-bottom: 30px;
+            background: var(--accent-blue);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid #eef2f7;
+        }
+        .info-row { display: flex; margin-bottom: 12px; align-items: center; border-bottom: 1px solid rgba(0,0,0,0.03); padding-bottom: 6px; }
+        .info-row:last-child { margin-bottom: 0; border-bottom: none; }
+        .info-row label { width: 85px; font-weight: 600; font-size: 14px; flex-shrink: 0; color: var(--primary-color); }
+        .info-row input { 
+            flex: 1; 
+            border: none; 
+            background: transparent; 
+            font-size: 14px; 
+            padding: 2px 0;
+            outline: none;
+            color: var(--text-color);
+            font-weight: 400;
+        }
+        .info-row input::placeholder { color: #bdc3c7; }
+
+        /* 表格區 */
+        .table-container { flex-grow: 1; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th { 
+            background-color: var(--primary-color); 
+            color: white; 
+            border: 1px solid var(--primary-color); 
+            padding: 12px 6px; 
+            font-size: 13px; 
+            font-weight: 600; 
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center; /* 標題全部置中 */
+            vertical-align: middle;
+        }
+        td { border: 1px solid var(--border-color); padding: 10px 8px; font-size: 13px; word-break: break-all; vertical-align: middle; }
+        
+        #quoteTable tbody tr:hover { background-color: #fcfdfe; }
+        
+        .item-input { 
+            width: 100%; border: none; font-size: 13px; outline: none; box-sizing: border-box; background: transparent; 
+            padding: 6px; border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .item-input:focus { background: #fff; box-shadow: inset 0 0 0 1px var(--primary-light); }
+        .num-input { text-align: right; font-family: 'Inter', sans-serif; font-weight: 500; }
+        .center-input { text-align: center; }
+
+        /* 項目編號 */
+        .item-no { text-align: center; color: var(--text-light); font-weight: 600; font-family: 'Inter', sans-serif; }
+
+        /* 總計區 */
+        .summary-section { 
+            display: flex; 
+            justify-content: flex-end; 
+            border-top: 2px solid var(--primary-color); 
+            padding-top: 20px; 
+            margin-top: 10px;
+        }
+        .summary-table { width: auto; min-width: 360px; } /* 增加寬度並改為自動寬度 */
+        .summary-table td { 
+            border: none; 
+            padding: 6px 12px; 
+            text-align: right; 
+            font-size: 15px; 
+            white-space: nowrap; /* 防止標籤換行 */
+        }
+        .summary-table td:first-child {
+            color: var(--text-light);
+            font-weight: 500;
+        }
+        .summary-table td:last-child {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            width: 140px;
+            color: var(--text-color);
+        }
+        
+        .grand-total { 
+            font-size: 20px !important; 
+            font-weight: 700; 
+        }
+        .grand-total td { 
+            border-top: 1.5px solid var(--border-color); 
+            padding-top: 15px !important;
+            color: var(--secondary-color) !important;
+        }
+        .grand-total td:last-child {
+            font-size: 24px;
+        }
+
+        /* 備註與簽章 */
+        .notes-section { margin-top: 30px; border: 1px solid var(--border-color); border-radius: 10px; padding: 20px; background: #fafafa; }
+        .notes-title { font-weight: 700; margin-bottom: 12px; color: var(--primary-color); display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        .notes-box { 
+            width: 100%; min-height: 100px; font-size: 13px;
+            line-height: 1.8; white-space: pre-wrap; outline: none; color: #505050;
+        }
+
+        .footer-sig { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 40px; }
+        .sig-item { 
+            width: 220px; 
+            text-align: center; 
+            border-top: 2px solid var(--primary-color); 
+            padding-top: 12px; 
+            font-size: 14px; 
+            font-weight: 600; 
+            color: var(--primary-color);
+        }
+
+        /* 刪除按鈕 */
+        .btn-del {
+            color: #e74c3c; border: none; background: #fdf2f2; cursor: pointer; 
+            font-size: 18px; width: 30px; height: 30px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+            margin: 0 auto;
+        }
+        .btn-del:hover { background: #e74c3c; color: white; transform: scale(1.1); }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .btn-area, .no-print { display: none !important; }
+            .page { box-shadow: none; margin: 0; width: 210mm; min-height: 297mm; padding: 15mm 20mm; border: none; border-radius: 0; }
+            .notes-section { background: white; border: 1px solid #eee; }
+            .customer-section { background: #f8f9fa !important; border: 1px solid #eee; }
+            th { background-color: #1a237e !important; color: white !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="btn-area">
+        <button class="btn btn-add" onclick="addRow()">＋ 新增項目</button>
+        <button class="btn btn-save" onclick="saveData()">💾 儲存資料檔</button>
+        <button class="btn btn-load" onclick="document.getElementById('loadFile').click()">📂 載入資料檔</button>
+        <input type="file" id="loadFile" style="display:none" onchange="loadData(this)" accept=".json">
+        <button class="btn btn-ics" onclick="generateICS()">📅 加入日曆 (ICS)</button>
+        <button class="btn btn-print" onclick="window.print()">🖨️ 列印 A4 PDF</button>
+        <button class="btn" onclick="convertToPI()" style="background: #e91e63; color: white;">📄 轉換為正式訂單 (PI)</button>
+    </div>
+
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo-box">
+                    <img src="logo.png" alt="LOGO" onerror="this.innerHTML='<span style=\'color:#ccc;font-size:12px\'>LOGO</span>'">
+                </div>
+                <div class="company-info">
+                    <h1>銓瑞複材科技股份有限公司</h1>
+                    <p>429台中市神岡區中山路898巷2號</p>
+                    <p>TEL: (04) 2562-2559  |  統一編號: 82771130</p>
+                </div>
+            </div>
+            <div class="doc-info">
+                <h2>報價單</h2>
+                <div class="doc-meta">
+                    <div><label>單號：</label><input type="text" id="quoteId" placeholder="QU-YYYYMMDD-01"></div>
+                    <div><label>日期：</label><input type="date" id="currentDate"></div>
+                    <div><label>追蹤：</label><input type="date" id="followUpDate" title="預計追蹤/到期日"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="customer-section">
+            <div class="col">
+                <div class="info-row"><label>客戶名稱</label><input type="text" id="custName" placeholder="請輸入客戶公司全銜"></div>
+                <div class="info-row"><label>聯絡人員</label><input type="text" id="custContact" placeholder="聯絡人姓名"></div>
+                <div class="info-row"><label>聯絡電話</label><input type="text" id="custTel" placeholder="04-XXXXXXX"></div>
+            </div>
+            <div class="col">
+                <div class="info-row"><label>電子郵件</label><input type="text" id="custEmail" placeholder="example@mail.com"></div>
+                <div class="info-row"><label>聯絡地址</label><input type="text" id="custAddr" placeholder="客戶公司地址"></div>
+                <div class="info-row"><label>有效期限</label><input type="text" value="報價日起 30 天" readonly style="color:var(--secondary-color); font-weight:700;"></div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="quoteTable">
+                <thead>
+                    <tr>
+                        <th width="35" class="no-print">#</th>
+                        <th width="40">項次</th>
+                        <th>品名及規格說明 (Description)</th>
+                        <th width="65">數量</th>
+                        <th width="55">單位</th>
+                        <th width="110">單價 (TWD)</th>
+                        <th width="120">小計 (TWD)</th>
+                    </tr>
+                </thead>
+                <tbody id="quoteBody">
+                    <!-- Rows will be added here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="summary-section">
+            <table class="summary-table">
+                <tr><td>銷售金額 (未稅) Subtotal:</td><td>NT$ <span id="rawTotal">0</span></td></tr>
+                <tr><td>營業稅 (5%) VAT:</td><td>NT$ <span id="tax">0</span></td></tr>
+                <tr class="grand-total"><td>應收總計 Total Amount:</td><td>NT$ <span id="grandTotal">0</span></td></tr>
+            </table>
+        </div>
+
+        <div class="notes-section">
+            <div class="notes-title">📌 備註事項 (Remarks)：</div>
+            <div class="notes-box" contenteditable="true" id="notesArea">1. 交貨期限：訂單確認後 35-45 天。
+2. 報價有效期：30 天。
+3. 付款方式：下單預付 50% 訂金，出貨前付清尾款。
+4. 匯款帳戶：合作金庫神岡分行 (006) 帳號：2077-717-063562。
+5. 戶名：銓瑞複材科技股份有限公司。</div>
+        </div>
+
+        <div class="footer-sig">
+            <div class="sig-item">客戶簽章認可 (Confirmed by)</div>
+            <div class="sig-item">核准 / 報價人 (Approved by)</div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化日期與單號
+        const today = new Date();
+        document.getElementById('currentDate').valueAsDate = today;
+        
+        // 預設追蹤日期為 7 天後
+        const followUp = new Date();
+        followUp.setDate(today.getDate() + 7);
+        document.getElementById('followUpDate').valueAsDate = followUp;
+        
+        const dateStr = today.toISOString().slice(0,10).replace(/-/g, '');
+        document.getElementById('quoteId').value = `QU-${dateStr}-01`;
+
+        // 核心：列生成函式 (防禦性設計)
+        function createRow(spec = "", qty = 0, unit = "pcs", price = 0) {
+            const tbody = document.getElementById("quoteBody");
+            const rowCount = tbody.rows.length + 1;
+            const row = tbody.insertRow();
+            
+            // 安全處理：轉義 HTML 特殊字元
+            const escape = (str) => String(str).replace(/[&<>"']/g, m => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[m]));
+
+            row.innerHTML = `
+                <td class="no-print" style="text-align:center">
+                    <button class="btn-del" onclick="removeRow(this)">×</button>
+                </td>
+                <td class="item-no">${rowCount}</td>
+                <td><input type="text" class="item-input spec" value="${escape(spec)}" placeholder="請輸入產品規格"></td>
+                <td><input type="number" class="item-input num-input center-input qty" value="${qty}" min="0" oninput="calc()"></td>
+                <td><input type="text" class="item-input center-input unit" value="${escape(unit)}"></td>
+                <td><input type="number" class="item-input num-input price" value="${price}" min="0" oninput="calc()"></td>
+                <td><input type="text" class="item-input num-input subtotal" value="0" readonly></td>
+            `;
+            calc();
+        }
+
+        function addRow() {
+            createRow("", 0, "pcs", 0);
+        }
+
+        function removeRow(btn) {
+            btn.parentElement.parentElement.remove();
+            reorderItems();
+            calc();
+        }
+
+        // 重新編號
+        function reorderItems() {
+            document.querySelectorAll(".item-no").forEach((td, index) => {
+                td.innerText = index + 1;
+            });
+        }
+        // 計算邏輯
+        function calc() {
+            let total = 0;
+            document.querySelectorAll("#quoteBody tr").forEach(row => {
+                const q = parseFloat(row.querySelector(".qty").value) || 0;
+                const p = parseFloat(row.querySelector(".price").value) || 0;
+                const sub = q * p;
+                row.querySelector(".subtotal").value = sub.toLocaleString('en-US');
+                total += sub;
+            });
+            
+            const tax = Math.round(total * 0.05);
+            document.getElementById("rawTotal").innerText = total.toLocaleString('en-US');
+            document.getElementById("tax").innerText = tax.toLocaleString('en-US');
+            document.getElementById("grandTotal").innerText = (total + tax).toLocaleString('en-US');
+        }
+
+        // 生成 ICS 檔案
+        function generateICS() {
+            const quoteId = document.getElementById('quoteId').value;
+            const custName = document.getElementById('custName').value || '未知客戶';
+            const followUpDate = document.getElementById('followUpDate').value;
+            const grandTotal = document.getElementById('grandTotal').innerText;
+            const notes = document.getElementById('notesArea').innerText;
+
+            if (!followUpDate) {
+                alert('請先選擇追蹤日期');
+                return;
+            }
+
+            // 格式化日期為 YYYYMMDD
+            const dateObj = new Date(followUpDate);
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            const dateStr = `${y}${m}${d}`;
+
+            // ICS 內容構建
+            const icsLines = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Quotation System//ZH-TW',
+                'BEGIN:VEVENT',
+                `DTSTART;VALUE=DATE:${dateStr}`,
+                `DTEND;VALUE=DATE:${dateStr}`,
+                `SUMMARY:[報價追蹤] ${custName} (${quoteId})`,
+                `DESCRIPTION:客戶: ${custName}\\n金額: NT$ ${grandTotal}\\n備註:\\n${notes.replace(/\n/g, '\\n')}`,
+                'STATUS:CONFIRMED',
+                'BEGIN:VALARM',
+                'TRIGGER:-PT9H', // 早上 9 點提醒
+                'ACTION:DISPLAY',
+                'DESCRIPTION:Reminder',
+                'END:VALARM',
+                'END:VEVENT',
+                'END:VCALENDAR'
+            ];
+
+            const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `追蹤_${custName}_${dateStr}.ics`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 儲存資料
+        function saveData() {
+            const items = [];
+            document.querySelectorAll("#quoteBody tr").forEach(row => {
+                items.push({
+                    spec: row.querySelector(".spec").value,
+                    qty: row.querySelector(".qty").value,
+                    unit: row.querySelector(".unit").value,
+                    price: row.querySelector(".price").value
+                });
+            });
+
+            const data = {
+                quoteId: document.getElementById('quoteId').value,
+                date: document.getElementById('currentDate').value,
+                followUpDate: document.getElementById('followUpDate').value,
+                custName: document.getElementById('custName').value,
+                custContact: document.getElementById('custContact').value,
+                custTel: document.getElementById('custTel').value,
+                custEmail: document.getElementById('custEmail').value,
+                custAddr: document.getElementById('custAddr').value,
+                notes: document.getElementById('notesArea').innerText,
+                items: items
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `報價單_${data.custName || '未命名'}_${data.date}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 載入資料
+        function loadData(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const d = JSON.parse(e.target.result);
+                    
+                    // 填入基本資訊
+                    document.getElementById('quoteId').value = d.quoteId || "";
+                    document.getElementById('currentDate').value = d.date || "";
+                    document.getElementById('followUpDate').value = d.followUpDate || "";
+                    document.getElementById('custName').value = d.custName || "";
+                    document.getElementById('custContact').value = d.custContact || "";
+                    document.getElementById('custTel').value = d.custTel || "";
+                    document.getElementById('custEmail').value = d.custEmail || "";
+                    document.getElementById('custAddr').value = d.custAddr || "";
+                    document.getElementById('notesArea').innerText = d.notes || "";
+                    
+                    // 重建表格
+                    const tbody = document.getElementById("quoteBody");
+                    tbody.innerHTML = "";
+                    if (d.items && Array.isArray(d.items)) {
+                        d.items.forEach(i => {
+                            createRow(i.spec, i.qty, i.unit, i.price);
+                        });
+                    }
+                    
+                    calc();
+                    alert("資料載入成功！");
+                } catch (err) {
+                    alert("檔案格式錯誤，無法載入。");
+                }
+                input.value = "";
+            };
+            reader.readAsText(file);
+        }
+
+        // 轉換為 PI
+        function convertToPI() {
+            const items = [];
+            document.querySelectorAll("#quoteBody tr").forEach(row => {
+                items.push({
+                    spec: row.querySelector(".spec").value,
+                    qty: row.querySelector(".qty").value,
+                    unit: row.querySelector(".unit").value,
+                    price: row.querySelector(".price").value
+                });
+            });
+
+            const data = {
+                quoteId: document.getElementById('quoteId').value,
+                date: document.getElementById('currentDate').value,
+                custName: document.getElementById('custName').value,
+                custContact: document.getElementById('custContact').value,
+                custTel: document.getElementById('custTel').value,
+                custEmail: document.getElementById('custEmail').value,
+                custAddr: document.getElementById('custAddr').value,
+                notes: document.getElementById('notesArea').innerText,
+                items: items
+            };
+
+            localStorage.setItem('pendingPI', JSON.stringify(data));
+            
+            // 嘗試開啟新的 PI 頁面
+            // 這裡使用相對路徑，前提是兩者目錄結構正確
+            const piUrl = '../正式訂單(PI)系統/ProfomaInvoiceV1.html';
+            window.open(piUrl, '_blank');
+        }
+
+        // 預設建立一行，或讀取匯入的成本資料
+        window.onload = () => {
+            const importedData = localStorage.getItem('importQuoteItems');
+            if (importedData) {
+                try {
+                    const items = JSON.parse(importedData);
+                    if (items && items.length > 0) {
+                        items.forEach(item => {
+                            createRow(item.spec, item.qty, item.unit, item.price);
+                        });
+                    } else {
+                        addRow();
+                    }
+                } catch (e) {
+                    console.error('匯入資料解析錯誤', e);
+                    addRow();
+                }
+                localStorage.removeItem('importQuoteItems');
+            } else {
+                addRow();
+            }
+        };
+    </script>
+</body>
+</html>
+
