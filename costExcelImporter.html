@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>開發成本批次匯入系統</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #1a237e;
+            --secondary-color: #f57c00;
+            --success-color: #27ae60;
+            --bg-color: #f0f2f5;
+            --border-color: #dcdfe6;
+            --text-color: #2c3e50;
+            --white: #ffffff;
+            --tooling-bg: #fffbf5;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 40px 20px;
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: var(--white);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 30px;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--primary-color);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            background-color: #f8fbff;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 30px;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            background-color: #e8f0fe;
+            border-color: var(--secondary-color);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--primary-color);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 600;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        input[type="number"] {
+            width: 80px;
+            padding: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            text-align: center;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .markup-input {
+            width: 60px !important;
+            border-color: var(--secondary-color) !important;
+            font-weight: bold;
+        }
+
+        .calculated-price {
+            font-weight: bold;
+            color: var(--success-color);
+            font-size: 1.1em;
+        }
+
+        .btn-transfer {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-transfer:hover {
+            background-color: #219653;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(39,174,96,0.3);
+        }
+        
+        .btn-transfer:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .status {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: -20px;
+            margin-bottom: 20px;
+            text-align: right;
+        }
+
+        /* 模具費用參考區塊樣式 */
+        #toolingContainer {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .tooling-card {
+            background: var(--tooling-bg);
+            border: 1px solid #ffe0b2;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+
+        .tooling-header {
+            color: var(--secondary-color);
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #ffe0b2;
+            padding-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tooling-table {
+            margin-bottom: 0;
+            background: white;
+        }
+
+        .tooling-table th {
+            background-color: #fb8c00;
+            color: white;
+            padding: 8px;
+            font-size: 14px;
+        }
+
+        .tooling-table td {
+            padding: 8px;
+            font-size: 14px;
+        }
+        
+        .empty-cell {
+            color: #ccc;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📊 開發成本批次匯入系統</h1>
+    
+    <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">點擊選擇或拖曳多份 Excel 檔案至此處 (.xlsx, .xls)</div>
+        <input type="file" id="fileInput" multiple accept=".xlsx, .xls, .csv" onchange="handleFiles(this.files)">
+    </div>
+
+    <div class="status" id="statusText">尚未匯入檔案</div>
+
+    <table id="dataTable" style="display:none;">
+        <thead>
+            <tr>
+                <th width="40" class="center"><input type="checkbox" id="selectAll" checked onchange="toggleAll(this)"></th>
+                <th>檔案名稱</th>
+                <th>專案名稱 / 品名 (A3)</th>
+                <th width="120" class="right">基礎成本 (E20)</th>
+                <th width="140" class="center">加成百分比 (%)</th>
+                <th width="140" class="right">最終報價 (單價)</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+            <!-- Data will be populated here -->
+        </tbody>
+    </table>
+
+    <button id="transferBtn" class="btn-transfer" style="display:none;" onclick="transferData()">🚀 勾選項目一鍵轉入報價單</button>
+</div>
+
+<!-- 模具費用參考顯示區 -->
+<div id="toolingContainer"></div>
+
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const parsedData = [];
+
+    // Drag and Drop 處理
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+    });
+
+    // 讀取多個檔案
+    async function handleFiles(files) {
+        if (!files || files.length === 0) return;
+        
+        document.getElementById('statusText').innerText = `正在處理 ${files.length} 個檔案...`;
+        
+        for (let i = 0; i < files.length; i++) {
+            await processExcel(files[i]);
+        }
+        
+        renderTable();
+        renderTooling();
+    }
+
+    // 解析單一 Excel
+    function processExcel(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                
+                // 尋找 summary 分頁
+                let targetSheetName = null;
+                for(let sheetName of workbook.SheetNames) {
+                    if (sheetName.toLowerCase() === 'summary') {
+                        targetSheetName = sheetName;
+                        break;
+                    }
+                }
+                
+                if (!targetSheetName) {
+                    targetSheetName = workbook.SheetNames[0];
+                }
+                
+                const worksheet = workbook.Sheets[targetSheetName];
+                
+                // 1. 抓取基本資料 (A3, E20)
+                const a3Cell = worksheet['A3'];
+                const e20Cell = worksheet['E20'];
+                
+                const spec = a3Cell ? a3Cell.v : '（未找到品名資料）';
+                const cost = e20Cell && !isNaN(e20Cell.v) ? parseFloat(e20Cell.v) : 0;
+
+                // 2. 抓取模具費用 (G7:L12) - 使用 sheet_to_json 讀取範圍
+                // G7:L12 轉換為座標範圍 (0-indexed)
+                // G是第6欄(從0開始)，L是第11欄。 7是第6列，12是第11列。
+                let toolingData = null;
+                try {
+                    // 使用 header: 1 代表回傳二維陣列
+                    const rawRange = XLSX.utils.sheet_to_json(worksheet, { header: 1, range: "G7:L12", defval: "" });
+                    
+                    // 檢查是否全空
+                    let hasData = false;
+                    for (let row of rawRange) {
+                        for (let cell of row) {
+                            if (cell !== undefined && cell !== null && String(cell).trim() !== "") {
+                                hasData = true;
+                                break;
+                            }
+                        }
+                        if (hasData) break;
+                    }
+                    
+                    if (hasData) {
+                        toolingData = rawRange;
+                    }
+                } catch(err) {
+                    console.warn("無法解析 G7:L12 範圍", err);
+                }
+
+                parsedData.push({
+                    id: Date.now() + Math.random().toString(36).substr(2, 9),
+                    fileName: file.name,
+                    spec: spec,
+                    cost: cost,
+                    markup: 20,
+                    selected: true,
+                    toolingData: toolingData // 儲存模具資料供預覽
+                });
+                
+                resolve();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // 渲染主表格
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        
+        if (parsedData.length > 0) {
+            document.getElementById('dataTable').style.display = 'table';
+            document.getElementById('transferBtn').style.display = 'block';
+            document.getElementById('statusText').innerText = `已載入 ${parsedData.length} 筆資料`;
+        }
+        
+        parsedData.forEach((item) => {
+            const tr = document.createElement('tr');
+            const finalPrice = Math.round(item.cost * (1 + item.markup / 100));
+            
+            tr.innerHTML = `
+                <td class="center"><input type="checkbox" class="row-check" data-id="${item.id}" ${item.selected ? 'checked' : ''} onchange="updateSelection('${item.id}', this.checked)"></td>
+                <td>${item.fileName}</td>
+                <td>${item.spec}</td>
+                <td class="right">${item.cost.toLocaleString('en-US')}</td>
+                <td class="center">
+                    <input type="number" class="markup-input" value="${item.markup}" min="0" oninput="updateMarkup('${item.id}', this.value)"> %
+                </td>
+                <td class="right calculated-price" id="price-${item.id}">${finalPrice.toLocaleString('en-US')}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        
+        updateTransferBtnState();
+    }
+
+    // 渲染模具費用參考區
+    function renderTooling() {
+        const container = document.getElementById('toolingContainer');
+        container.innerHTML = '';
+        
+        const itemsWithTooling = parsedData.filter(item => item.toolingData);
+        
+        if (itemsWithTooling.length > 0) {
+            itemsWithTooling.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'tooling-card';
+                
+                // 表頭顯示專案名稱 (A3)
+                const header = document.createElement('h3');
+                header.className = 'tooling-header';
+                header.innerHTML = `🛠️ 模具費用參考：${item.spec} <span style="font-size:12px; color:#999; font-weight:normal">(資料來源: ${item.fileName} G7-L12)</span>`;
+                card.appendChild(header);
+                
+                // 建立表格
+                const table = document.createElement('table');
+                table.className = 'tooling-table';
+                const tbody = document.createElement('tbody');
+                
+                item.toolingData.forEach(row => {
+                    const tr = document.createElement('tr');
+                    // G 到 L 共 6 欄 (如果因合併儲存格導致陣列長度不足，補齊6欄)
+                    for (let i = 0; i < 6; i++) {
+                        const td = document.createElement('td');
+                        const val = row[i];
+                        if (val !== undefined && val !== null && val !== "") {
+                            // 判斷是否為數字，是的話加上千分位
+                            if (!isNaN(val) && typeof val === 'number') {
+                                td.innerText = val.toLocaleString('en-US');
+                                td.className = 'right';
+                            } else {
+                                td.innerText = val;
+                            }
+                        } else {
+                            td.innerHTML = '<span class="empty-cell">-</span>';
+                            td.className = 'center';
+                        }
+                        tr.appendChild(td);
+                    }
+                    tbody.appendChild(tr);
+                });
+                
+                table.appendChild(tbody);
+                card.appendChild(table);
+                container.appendChild(card);
+            });
+        }
+    }
+
+    function updateMarkup(id, newMarkup) {
+        const item = parsedData.find(d => d.id === id);
+        if (item) {
+            item.markup = parseFloat(newMarkup) || 0;
+            const finalPrice = Math.round(item.cost * (1 + item.markup / 100));
+            document.getElementById(`price-${id}`).innerText = finalPrice.toLocaleString('en-US');
+        }
+    }
+    
+    function updateSelection(id, isChecked) {
+        const item = parsedData.find(d => d.id === id);
+        if (item) item.selected = isChecked;
+        updateTransferBtnState();
+    }
+    
+    function toggleAll(checkbox) {
+        const isChecked = checkbox.checked;
+        document.querySelectorAll('.row-check').forEach(cb => {
+            cb.checked = isChecked;
+        });
+        parsedData.forEach(item => {
+            item.selected = isChecked;
+        });
+        updateTransferBtnState();
+    }
+    
+    function updateTransferBtnState() {
+        const hasSelected = parsedData.some(item => item.selected);
+        document.getElementById('transferBtn').disabled = !hasSelected;
+    }
+
+    function transferData() {
+        const selectedItems = parsedData.filter(item => item.selected);
+        if (selectedItems.length === 0) return;
+        
+        // 匯出資料 (不包含模具費用，也不算加成)
+        const exportItems = selectedItems.map(item => {
+            const finalPrice = Math.round(item.cost * (1 + item.markup / 100));
+            return {
+                spec: item.spec,
+                qty: 1,
+                unit: 'pcs',
+                price: finalPrice
+            };
+        });
+        
+        localStorage.setItem('importQuoteItems', JSON.stringify(exportItems));
+        const targetUrl = 'quotationV4.html';
+        window.open(targetUrl, '_blank');
+    }
+</script>
+</body>
+</html>
