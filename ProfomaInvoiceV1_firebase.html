@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proforma Invoice (Firebase版) - 銓瑞複材科技</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --primary-light: #34495e;
+            --secondary-color: #c0392b;
+            --text-color: #2c3e50;
+            --text-light: #7f8c8d;
+            --bg-color: #f0f2f5;
+            --border-color: #dcdfe6;
+            --white: #ffffff;
+            --accent-blue: #f8fbff;
+            --success-color: #27ae60;
+            --shadow-subtle: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --shadow-medium: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 15px 0;
+            color: var(--text-color);
+            -webkit-print-color-adjust: exact;
+            line-height: 1.5;
+        }
+
+        /* 頂部控制面板 */
+        .btn-area {
+            text-align: center;
+            margin-bottom: 20px;
+            position: sticky;
+            top: 0;
+            background: rgba(240, 242, 245, 0.9);
+            backdrop-filter: blur(12px);
+            padding: 20px;
+            z-index: 1000;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: var(--shadow-subtle);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+            filter: brightness(1.1);
+        }
+        .btn:active { transform: translateY(0); }
+
+        .btn-add { background: var(--success-color); color: white; }
+        .btn-save { background: #673ab7; color: white; }
+        .btn-load { background: #f39c12; color: white; }
+        .btn-print { background: var(--primary-color); color: white; }
+        .btn-cloud-save { background: #e91e63; color: white; }
+        .btn-cloud-load { background: #009688; color: white; }
+
+        /* A4 容器主體 */
+        .page {
+            background: var(--white);
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 12mm 15mm;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            border-radius: 4px;
+        }
+
+        /* 表頭區域 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 4px solid var(--primary-color);
+            padding-bottom: 12px;
+            margin-bottom: 15px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .logo-box {
+            width: 140px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .company-info h1 { margin: 0; color: var(--primary-color); font-size: 24px; letter-spacing: 0.5px; font-weight: 700; }
+        .company-info p { margin: 6px 0; font-size: 13px; color: var(--text-light); }
+        .doc-info { text-align: right; }
+        .doc-info h2 { 
+            margin: 0 0 10px 0; 
+            font-size: 28px; 
+            letter-spacing: 2px; 
+            color: var(--primary-color);
+            text-align: right;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .doc-meta {
+            display: inline-grid;
+            grid-template-columns: auto auto;
+            gap: 4px 10px;
+            background: #fcfdfe;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #ebf0f5;
+            text-align: left;
+        }
+        .doc-meta div { display: contents; }
+        .doc-meta label {
+            font-size: 13px;
+            color: var(--text-light);
+            font-weight: 600;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+        }
+        .doc-meta input {
+            border: none;
+            border-bottom: 1.5px solid var(--border-color);
+            text-align: right;
+            width: 140px;
+            font-size: 14px;
+            outline: none;
+            padding: 2px 4px;
+            color: var(--primary-color);
+            font-weight: 700;
+            background: transparent;
+            transition: all 0.2s;
+        }
+        .doc-meta input:focus { border-color: var(--primary-color); background: #fff; }
+
+        /* 客戶資料區 */
+        .customer-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 15px;
+            background: var(--accent-blue);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #eef2f7;
+        }
+        .info-row {
+            display: flex;
+            margin-bottom: 8px;
+            align-items: center;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+            padding-bottom: 4px;
+        }
+        .info-row:last-child { margin-bottom: 0; border-bottom: none; }
+        .info-row label {
+            width: 85px;
+            font-weight: 600;
+            font-size: 14px;
+            flex-shrink: 0;
+            color: var(--primary-color);
+        }
+        .info-row input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            padding: 2px 0;
+            outline: none;
+            color: var(--text-color);
+            font-weight: 400;
+        }
+        .info-row input::placeholder { color: #bdc3c7; }
+
+        /* 表格區 */
+        .table-container { flex-grow: 1; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            border: 1px solid var(--primary-color);
+            padding: 8px 4px;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        td { border: 1px solid var(--border-color); padding: 6px 6px; font-size: 13px; word-break: break-all; vertical-align: middle; }
+        #piTable tbody tr:hover { background-color: #fcfdfe; }
+        .item-input {
+            width: 100%;
+            border: none;
+            font-size: 13px;
+            outline: none;
+            box-sizing: border-box;
+            background: transparent;
+            padding: 6px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .item-input:focus { background: #fff; box-shadow: inset 0 0 0 1px var(--primary-light); }
+        .num-input { text-align: right; font-family: 'Inter', sans-serif; font-weight: 500; }
+        .center-input { text-align: center; }
+        .item-no { text-align: center; color: var(--text-light); font-weight: 600; font-family: 'Inter', sans-serif; }
+
+        /* 總計區 */
+        .summary-section {
+            display: flex;
+            justify-content: flex-end;
+            border-top: 2px solid var(--primary-color);
+            padding-top: 10px;
+            margin-top: 5px;
+        }
+        .summary-table { width: auto; min-width: 360px; }
+        .summary-table td {
+            border: none;
+            padding: 4px 8px;
+            text-align: right;
+            font-size: 15px;
+            white-space: nowrap;
+        }
+        .summary-table td:first-child { color: var(--text-light); font-weight: 500; }
+        .summary-table td:last-child {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            width: 140px;
+            color: var(--text-color);
+        }
+        .grand-total { font-size: 20px !important; font-weight: 700; }
+        .grand-total td {
+            border-top: 1.5px solid var(--border-color);
+            padding-top: 15px !important;
+            color: var(--secondary-color) !important;
+        }
+        .grand-total td:last-child { font-size: 24px; }
+
+        /* 備註與簽章 */
+        .notes-section { margin-top: 15px; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; background: #fafafa; }
+        .notes-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .notes-box {
+            width: 100%;
+            min-height: 80px;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            outline: none;
+            color: #505050;
+        }
+        .footer-sig { display: flex; justify-content: space-between; margin-top: 35px; padding: 0 40px; }
+        .sig-item {
+            width: 220px;
+            text-align: center;
+            border-top: 2px solid var(--primary-color);
+            padding-top: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        /* 刪除按鈕 */
+        .btn-del {
+            color: #e74c3c;
+            border: none;
+            background: #fdf2f2;
+            cursor: pointer;
+            font-size: 18px;
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            margin: 0 auto;
+        }
+        .btn-del:hover { background: #e74c3c; color: white; transform: scale(1.1); }
+
+        /* --- Firebase Modal 樣式 --- */
+        .fb-modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+        .fb-modal-content {
+            background-color: #fff;
+            border-radius: 12px;
+            width: 85%;
+            max-width: 850px;
+            max-height: 80vh;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: fbModalShow 0.3s ease-out;
+        }
+        @keyframes fbModalShow {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .fb-modal-header {
+            padding: 16px 24px;
+            background: var(--primary-color);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .fb-modal-header h3 { margin: 0; font-size: 18px; font-weight: 600; }
+        .fb-close { font-size: 24px; font-weight: bold; cursor: pointer; color: rgba(255,255,255,0.8); }
+        .fb-close:hover { color: white; }
+        .fb-modal-body { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        .fb-search-bar input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+        .fb-search-bar input:focus { border-color: var(--primary-light); }
+        .fb-table-container { overflow-x: auto; max-height: 50vh; }
+        #fbHistoryTable { width: 100%; border-collapse: collapse; }
+        #fbHistoryTable th, #fbHistoryTable td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        #fbHistoryTable th { background: #f8fafc; font-weight: 600; color: var(--primary-color); }
+        .fb-btn-load { background: var(--success-color); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .fb-btn-delete { background: #fee2e2; color: #c62828; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 8px; }
+        .fb-btn-delete:hover { background: #c62828; color: white; }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .btn-area, .no-print, .fb-modal { display: none !important; }
+            .page {
+                box-shadow: none;
+                margin: 0;
+                width: 210mm;
+                min-height: 297mm;
+                padding: 10mm 15mm;
+                border: none;
+                border-radius: 0;
+            }
+            .notes-section { background: white; border: 1px solid #eee; }
+            .customer-section { background: #f8f9fa !important; border: 1px solid #eee; }
+            th { background-color: #2c3e50 !important; color: white !important; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div style="max-width:210mm;margin:0 auto 14px auto;padding:10px 16px;background:rgba(255,255,255,0.92);backdrop-filter:blur(8px);border:1px solid #dbe3ee;border-radius:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center;position:sticky;top:0;z-index:1100;">
+        <a href="index.html" style="text-decoration:none;color:#1a237e;font-weight:700;">Portal Home</a>
+        <a href="CustomerDatabase_firebase.html" style="text-decoration:none;color:#475569;">客戶資料</a>
+        <a href="quotationV4_firebase.html" style="text-decoration:none;color:#475569;">報價單</a>
+        <a href="ProfomaInvoiceV1_firebase.html" style="text-decoration:none;color:#475569;font-weight:700;">PI</a>
+        <a href="shipping%20document_firebase.html" style="text-decoration:none;color:#475569;">出貨單</a>
+        <a href="生產規格確認單V1_firebase.html" style="text-decoration:none;color:#475569;">生產規格</a>
+    </div>
+
+    <div class="btn-area">
+        <button class="btn btn-add" onclick="addRow()">＋ 新增項目</button>
+        <button class="btn btn-save" onclick="saveData()">💾 儲存資料檔</button>
+        <button class="btn btn-load" onclick="document.getElementById('loadFile').click()">📂 載入資料檔</button>
+        <input type="file" id="loadFile" style="display:none" onchange="loadData(this)" accept=".json">
+        
+        <!-- Firebase 按鈕 -->
+        <button class="btn btn-cloud-save" onclick="saveToCloud()">☁️ 雲端儲存</button>
+        <button class="btn btn-cloud-load" onclick="openHistoryModal()">📁 雲端歷史紀錄</button>
+
+        <button class="btn btn-print" onclick="window.print()">🖨️ 列印 PI (PDF)</button>
+        <button class="btn" onclick="convertToProductionSpecs()" style="background: #009688; color: white;">⚙️ 轉換為生產確認單</button>
+        <button class="btn" onclick="toggleLanguage()" style="background: #607d8b; color: white;">🌐 EN / 中文</button>
+    </div>
+
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo-box">
+                    <img src="logo.png" alt="LOGO" onerror="this.innerHTML='<span style=\'color:#ccc;font-size:12px\'>LOGO</span>'">
+                </div>
+                <div class="company-info">
+                    <h1 data-i18n="companyName">Windner Carbon Tech Co., Ltd.</h1>
+                    <p data-i18n="companyAddr">429台中市神岡區中山路898巷2號</p>
+                    <p>TEL: (04) 2562-2559 | 統一編號: 82771130</p>
+                </div>
+            </div>
+            <div class="doc-info">
+                <h2 data-i18n="title">PROFORMA INVOICE</h2>
+                <div class="doc-meta">
+                    <div><label data-i18n="piNo">P/I No：</label><input type="text" id="piId" placeholder="PI-YYYYMMDD-01"></div>
+                    <div><label data-i18n="date">Date：</label><input type="date" id="currentDate"></div>
+                    <div><label data-i18n="quoteRef">Quotation Ref：</label><input type="text" id="quoteRef" placeholder="QU-..."></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="customer-section">
+            <div class="col">
+                <div class="info-row"><label data-i18n="messrs">Messrs:</label><input type="text" id="custName" placeholder="Customer Name"></div>
+                <div class="info-row"><label data-i18n="attn">Attn:</label><input type="text" id="custContact" placeholder="Contact Person"></div>
+                <div class="info-row"><label data-i18n="tel">Tel:</label><input type="text" id="custTel" placeholder="Phone Number"></div>
+            </div>
+            <div class="col">
+                <div class="info-row"><label data-i18n="email">Email:</label><input type="text" id="custEmail" placeholder="example@mail.com"></div>
+                <div class="info-row"><label data-i18n="addr">Address:</label><input type="text" id="custAddr" placeholder="Shipping/Billing Address"></div>
+                <div class="info-row"><label data-i18n="validity">Validity:</label><input type="date" id="validityDate"></div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="piTable">
+                <thead>
+                    <tr>
+                        <th width="30" class="no-print">#</th>
+                        <th width="35" data-i18n="thItem">Item</th>
+                        <th data-i18n="thDesc">Description of Goods</th>
+                        <th width="200" data-i18n="thSpec">Material Spec</th>
+                        <th width="45" data-i18n="thQty">Qty</th>
+                        <th width="45" data-i18n="thUnit">Unit</th>
+                        <th width="85" data-i18n="thPrice">Unit Price</th>
+                        <th width="100" data-i18n="thAmount">Amount</th>
+                    </tr>
+                </thead>
+                <tbody id="piBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="summary-section">
+            <table class="summary-table">
+                <tr>
+                    <td data-i18n="subtotal">Subtotal:</td>
+                    <td>NT$ <span id="rawTotal">0</span></td>
+                </tr>
+                <tr>
+                    <td data-i18n="tax">VAT (5%):</td>
+                    <td>NT$ <span id="tax">0</span></td>
+                </tr>
+                <tr class="grand-total">
+                    <td data-i18n="grandTotal">Total Amount:</td>
+                    <td>NT$ <span id="grandTotal">0</span></td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="notes-section">
+            <div class="notes-title" data-i18n="remarks">📌 Remarks：</div>
+            <div class="notes-box" contenteditable="true" id="notesArea"></div>
+        </div>
+
+        <div class="footer-sig">
+            <div class="sig-item" data-i18n="confirmed">Confirmed & Accepted by</div>
+            <div class="sig-item" data-i18n="authorized">Authorized Signature</div>
+        </div>
+    </div>
+
+    <!-- Firebase 歷史紀錄 Modal -->
+    <div id="fbHistoryModal" class="fb-modal">
+        <div class="fb-modal-content">
+            <div class="fb-modal-header">
+                <h3>雲端歷史訂單 (Proforma Invoice)</h3>
+                <span class="fb-close" onclick="closeHistoryModal()">&times;</span>
+            </div>
+            <div class="fb-modal-body">
+                <div class="fb-search-bar">
+                    <input type="text" id="fbSearchInput" placeholder="搜尋客戶名稱或訂單編號..." oninput="filterHistory()">
+                </div>
+                <div class="fb-table-container">
+                    <table id="fbHistoryTable">
+                        <thead>
+                            <tr>
+                                <th>P/I No</th>
+                                <th>客戶名稱</th>
+                                <th>日期</th>
+                                <th>最後更新</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fbHistoryList">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">載入中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK 引入與整合 (Compat 模式，相容本機 file:// 協議免 CORS 限制) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyB9eYIZv8i2c_ljAMoio8csB2-RKWMwmMQ",
+            authDomain: "windner-document.firebaseapp.com",
+            projectId: "windner-document",
+            storageBucket: "windner-document.firebasestorage.app",
+            messagingSenderId: "285395707143",
+            appId: "1:285395707143:web:b23ba25a15e3cc099f11a2",
+            measurementId: "G-GKJQ6NR9NV"
+        };
+
+        // 初始化 Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        window.saveToCloud = async function() {
+            const piIdInput = document.getElementById('piId');
+            let piId = piIdInput.value.trim();
+
+            if (!piId) {
+                const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                piId = `PI-${today}-${Math.floor(10 + Math.random() * 90)}`;
+                piIdInput.value = piId;
+            }
+
+            alert("正在儲存至雲端...");
+
+            const items = [];
+            document.querySelectorAll("#piBody tr").forEach(row => {
+                items.push({
+                    prodName: row.querySelector(".prod-name").value,
+                    matSpec: row.querySelector(".mat-spec").value,
+                    qty: row.querySelector(".qty").value,
+                    unit: row.querySelector(".unit").value,
+                    price: row.querySelector(".price").value
+                });
+            });
+
+            const docData = {
+                piId: piId,
+                date: document.getElementById('currentDate').value,
+                quoteRef: document.getElementById('quoteRef').value,
+                custName: document.getElementById('custName').value,
+                custContact: document.getElementById('custContact').value,
+                custTel: document.getElementById('custTel').value,
+                custEmail: document.getElementById('custEmail').value,
+                custAddr: document.getElementById('custAddr').value,
+                validityDate: document.getElementById('validityDate').value,
+                notes: document.getElementById('notesArea').innerText,
+                items: items,
+                updatedAt: new Date().toISOString()
+            };
+
+            try {
+                await db.collection("proforma_invoices").doc(piId).set(docData);
+                alert("雲端儲存成功！");
+            } catch (error) {
+                console.error("Firebase error: ", error);
+                alert("雲端儲存失敗: " + error.message);
+            }
+        };
+
+        let cloudDocuments = [];
+
+        window.openHistoryModal = async function() {
+            document.getElementById('fbHistoryModal').style.display = 'flex';
+            const listContainer = document.getElementById('fbHistoryList');
+            listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;">讀取中...</td></tr>';
+
+            try {
+                const querySnapshot = await db.collection("proforma_invoices").orderBy("updatedAt", "desc").get();
+                cloudDocuments = [];
+                querySnapshot.forEach((doc) => {
+                    cloudDocuments.push(doc.data());
+                });
+                renderHistoryList(cloudDocuments);
+            } catch (error) {
+                console.error("Error fetching docs: ", error);
+                listContainer.innerHTML = `<tr><td colspan="5" style="text-align:center;color:red;">載入失敗: ${error.message}</td></tr>`;
+            }
+        };
+
+        function renderHistoryList(docs) {
+            const listContainer = document.getElementById('fbHistoryList');
+            if (docs.length === 0) {
+                listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;">尚無雲端 PI 單據</td></tr>';
+                return;
+            }
+
+            listContainer.innerHTML = '';
+            docs.forEach(d => {
+                const tr = document.createElement('tr');
+                const lastUpdate = d.updatedAt ? new Date(d.updatedAt).toLocaleString('zh-TW') : '無資料';
+                tr.innerHTML = `
+                    <td><strong>${d.piId}</strong></td>
+                    <td>${d.custName || '未命名'}</td>
+                    <td>${d.date || '無'}</td>
+                    <td style="font-size:12px;color:var(--text-light);">${lastUpdate}</td>
+                    <td>
+                        <button class="fb-btn-load" onclick="loadCloudDocument('${d.piId}')">載入</button>
+                        <button class="fb-btn-delete" onclick="deleteCloudDocument('${d.piId}')">刪除</button>
+                    </td>
+                `;
+                listContainer.appendChild(tr);
+            });
+        }
+
+        window.filterHistory = function() {
+            const queryVal = document.getElementById('fbSearchInput').value.toLowerCase();
+            const filtered = cloudDocuments.filter(d => 
+                (d.piId && d.piId.toLowerCase().includes(queryVal)) ||
+                (d.custName && d.custName.toLowerCase().includes(queryVal))
+            );
+            renderHistoryList(filtered);
+        };
+
+        window.loadCloudDocument = async function(id) {
+            try {
+                const docSnap = await db.collection("proforma_invoices").doc(id).get();
+
+                if (docSnap.exists) {
+                    const d = docSnap.data();
+                    fillForm(d);
+                    closeHistoryModal();
+                    alert("單據載入成功！");
+                } else {
+                    alert("找不到該單據！");
+                }
+            } catch (error) {
+                console.error("Error loading document:", error);
+                alert("載入失敗: " + error.message);
+            }
+        };
+
+        window.deleteCloudDocument = async function(id) {
+            if (confirm(`確定要刪除雲端 PI 單據 ${id} 嗎？此操作無法還原。`)) {
+                try {
+                    await db.collection("proforma_invoices").doc(id).delete();
+                    alert("雲端資料已刪除！");
+                    openHistoryModal();
+                } catch (error) {
+                    console.error("Error deleting doc: ", error);
+                    alert("刪除失敗: " + error.message);
+                }
+            }
+        };
+
+        window.closeHistoryModal = function() {
+            document.getElementById('fbHistoryModal').style.display = 'none';
+        }
+    </script>
+
+    <script>
+        const translations = {
+            en: {
+                title: "PROFORMA INVOICE",
+                piNo: "P/I No：",
+                date: "Date：",
+                quoteRef: "Quotation Ref：",
+                messrs: "Messrs:",
+                attn: "Attn:",
+                tel: "Tel:",
+                email: "Email:",
+                addr: "Address:",
+                validity: "Validity:",
+                thItem: "Item",
+                thDesc: "Description of Goods",
+                thSpec: "Material Spec",
+                thQty: "Qty",
+                thUnit: "Unit",
+                thPrice: "Unit Price",
+                thAmount: "Amount",
+                subtotal: "Subtotal:",
+                tax: "VAT (5%):",
+                grandTotal: "Total Amount:",
+                remarks: "📌 Remarks：",
+                confirmed: "Confirmed & Accepted by",
+                authorized: "Authorized Signature",
+                companyName: "Windner Carbon Tech Co., Ltd.",
+                companyAddr: "No. 2, Ln. 898, Zhongshan Rd., Shengang Dist., Taichung City 429, Taiwan",
+                defaultNotes: "1. Delivery Time: 35-45 days after order confirmation.\n2. Payment Terms: 50% deposit with order, balance before shipment.\n3. Bank: Taiwan Cooperative Bank, Shengang Branch (006) / A/C: 2077-717-063562 / Windner Carbon Tech Co., Ltd."
+            },
+            tw: {
+                title: "正式訂單 (P/I)",
+                piNo: "訂單編號：",
+                date: "日期：",
+                quoteRef: "報價單號：",
+                messrs: "客戶名稱:",
+                attn: "聯絡人:",
+                tel: "電話:",
+                email: "電子信箱:",
+                addr: "地址:",
+                validity: "有效期:",
+                thItem: "項次",
+                thDesc: "產品品名",
+                thSpec: "規格/材料",
+                thQty: "數量",
+                thUnit: "單位",
+                thPrice: "單價",
+                thAmount: "金額",
+                subtotal: "小計:",
+                tax: "營業稅 (5%):",
+                grandTotal: "總計金額:",
+                remarks: "📌 備註：",
+                confirmed: "客戶確認簽章",
+                authorized: "授權簽章",
+                companyName: "Windner Carbon Tech Co., Ltd. (銓瑞複材科技)",
+                companyAddr: "429台中市神岡區中山路898巷2號",
+                defaultNotes: "1. 交期：訂單確認後 35-45 天。\n2. 付款方式：訂金 50%，餘款出貨前付清。\n3. 銀行資訊：合作金庫銀行 神岡分行 (006) / 帳號: 2077-717-063562 / 銓瑞複材科技股份有限公司"
+            }
+        };
+
+        let currentLang = 'en';
+
+        function toggleLanguage() {
+            const oldLang = currentLang;
+            currentLang = currentLang === 'en' ? 'tw' : 'en';
+            applyLanguage(oldLang);
+        }
+
+        function applyLanguage(oldLang = null) {
+            const langData = translations[currentLang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (langData[key]) {
+                    el.innerText = langData[key];
+                }
+            });
+            
+            document.getElementById('custName').placeholder = currentLang === 'en' ? 'Customer Name' : '客戶名稱';
+            document.getElementById('custContact').placeholder = currentLang === 'en' ? 'Contact Person' : '聯絡人';
+            document.getElementById('custTel').placeholder = currentLang === 'en' ? 'Phone Number' : '聯絡電話';
+            document.getElementById('custEmail').placeholder = currentLang === 'en' ? 'example@mail.com' : '電子信箱';
+            document.getElementById('custAddr').placeholder = currentLang === 'en' ? 'Shipping/Billing Address' : '寄送/帳單地址';
+            document.getElementById('quoteRef').placeholder = currentLang === 'en' ? 'QU-...' : '報價單號';
+            document.getElementById('piId').placeholder = currentLang === 'en' ? 'PI-YYYYMMDD-01' : '訂單編號';
+
+            const notesBox = document.getElementById('notesArea');
+            const currentNotes = notesBox.innerText.trim();
+            const oldDefault = oldLang ? translations[oldLang].defaultNotes.trim() : "";
+            
+            if (currentNotes === "" || currentNotes === oldDefault) {
+                notesBox.innerText = langData.defaultNotes;
+            }
+        }
+
+        const today = new Date();
+        document.getElementById('currentDate').valueAsDate = today;
+
+        const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+        document.getElementById('piId').value = `PI-${dateStr}-01`;
+
+        function createRow(prodName = "", matSpec = "", qty = 0, unit = "pcs", price = 0) {
+            const tbody = document.getElementById("piBody");
+            const rowCount = tbody.rows.length + 1;
+            const row = tbody.insertRow();
+
+            const escape = (str) => String(str).replace(/[&<>"']/g, m => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[m]));
+
+            row.innerHTML = `
+                <td class="no-print" style="text-align:center">
+                    <button class="btn-del" onclick="removeRow(this)">×</button>
+                </td>
+                <td class="item-no">${rowCount}</td>
+                <td><input type="text" class="item-input prod-name" value="${escape(prodName)}" placeholder="Product Name"></td>
+                <td><input type="text" class="item-input mat-spec" value="${escape(matSpec)}" placeholder="Specification"></td>
+                <td><input type="number" class="item-input num-input center-input qty" value="${qty}" min="0" oninput="calc()"></td>
+                <td><input type="text" class="item-input center-input unit" value="${escape(unit)}"></td>
+                <td><input type="number" class="item-input num-input price" value="${price}" min="0" oninput="calc()"></td>
+                <td><input type="text" class="item-input num-input subtotal" value="0" readonly></td>
+            `;
+            calc();
+        }
+
+        function addRow() {
+            createRow("", "", 0, "pcs", 0);
+        }
+
+        function removeRow(btn) {
+            btn.parentElement.parentElement.remove();
+            reorderItems();
+            calc();
+        }
+
+        function reorderItems() {
+            document.querySelectorAll(".item-no").forEach((td, index) => {
+                td.innerText = index + 1;
+            });
+        }
+
+        function calc() {
+            let total = 0;
+            document.querySelectorAll("#piBody tr").forEach(row => {
+                const q = parseFloat(row.querySelector(".qty").value) || 0;
+                const p = parseFloat(row.querySelector(".price").value) || 0;
+                const sub = q * p;
+                row.querySelector(".subtotal").value = sub.toLocaleString('en-US');
+                total += sub;
+            });
+
+            const tax = Math.round(total * 0.05);
+            document.getElementById("rawTotal").innerText = total.toLocaleString('en-US');
+            document.getElementById("tax").innerText = tax.toLocaleString('en-US');
+            document.getElementById("grandTotal").innerText = (total + tax).toLocaleString('en-US');
+        }
+
+        function saveData() {
+            const items = [];
+            document.querySelectorAll("#piBody tr").forEach(row => {
+                items.push({
+                    prodName: row.querySelector(".prod-name").value,
+                    matSpec: row.querySelector(".mat-spec").value,
+                    qty: row.querySelector(".qty").value,
+                    unit: row.querySelector(".unit").value,
+                    price: row.querySelector(".price").value
+                });
+            });
+
+            const data = {
+                piId: document.getElementById('piId').value,
+                date: document.getElementById('currentDate').value,
+                quoteRef: document.getElementById('quoteRef').value,
+                custName: document.getElementById('custName').value,
+                custContact: document.getElementById('custContact').value,
+                custTel: document.getElementById('custTel').value,
+                custEmail: document.getElementById('custEmail').value,
+                custAddr: document.getElementById('custAddr').value,
+                validityDate: document.getElementById('validityDate').value,
+                notes: document.getElementById('notesArea').innerText,
+                items: items
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `PI_${data.custName || 'unnamed'}_${data.date}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function loadData(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const d = JSON.parse(e.target.result);
+                    fillForm(d);
+                    alert("Data loaded successfully!");
+                } catch (err) {
+                    alert("Invalid file format.");
+                }
+                input.value = "";
+            };
+            reader.readAsText(file);
+        }
+
+        function fillForm(d) {
+            if (d.piId) document.getElementById('piId').value = d.piId;
+            if (d.quoteId) document.getElementById('quoteRef').value = d.quoteId;
+            if (d.quoteRef) document.getElementById('quoteRef').value = d.quoteRef;
+            if (d.date) document.getElementById('currentDate').value = d.date;
+            if (d.custName) document.getElementById('custName').value = d.custName;
+            if (d.custContact) document.getElementById('custContact').value = d.custContact;
+            if (d.custTel) document.getElementById('custTel').value = d.custTel;
+            if (d.custEmail) document.getElementById('custEmail').value = d.custEmail;
+            if (d.custAddr) document.getElementById('custAddr').value = d.custAddr;
+            if (d.validityDate) document.getElementById('validityDate').value = d.validityDate;
+            if (d.notes) document.getElementById('notesArea').innerText = d.notes;
+
+            const tbody = document.getElementById("piBody");
+            tbody.innerHTML = "";
+            if (d.items && Array.isArray(d.items)) {
+                d.items.forEach(i => {
+                    const pName = i.prodName || i.spec || "";
+                    const mSpec = i.matSpec || "";
+                    createRow(pName, mSpec, i.qty, i.unit, i.price);
+                });
+            } else {
+                addRow();
+            }
+            calc();
+        }
+
+        function convertToProductionSpecs() {
+            const piData = {
+                custName: document.getElementById('custName').value,
+                piId: document.getElementById('piId').value,
+                date: document.getElementById('currentDate').value,
+                notes: document.getElementById('notesArea').innerText
+            };
+
+            const items = [];
+            document.querySelectorAll("#piBody tr").forEach(row => {
+                const prodInput = row.querySelector(".prod-name");
+                if (prodInput && prodInput.value) {
+                    items.push({
+                        prodName: prodInput.value,
+                        matSpec: row.querySelector(".mat-spec").value,
+                        qty: row.querySelector(".qty").value,
+                        unit: row.querySelector(".unit").value
+                    });
+                }
+            });
+
+            if (items.length === 0) {
+                alert("請先輸入至少一個品項規格");
+                return;
+            }
+
+            localStorage.setItem('pendingProductionSpecs', JSON.stringify({
+                piData: piData,
+                items: items
+            }));
+
+            const mfgUrl = '生產規格確認單V1_firebase.html?from=PI';
+            window.open(mfgUrl, '_blank');
+        }
+
+        window.onload = () => {
+            const today = new Date();
+            document.getElementById('currentDate').valueAsDate = today;
+
+            const validity = new Date();
+            validity.setDate(today.getDate() + 30);
+            document.getElementById('validityDate').valueAsDate = validity;
+
+            applyLanguage();
+
+            const pendingData = localStorage.getItem('pendingPI');
+            if (pendingData) {
+                try {
+                    const d = JSON.parse(pendingData);
+                    fillForm(d);
+                    localStorage.removeItem('pendingPI');
+                } catch (e) {
+                    console.error("Error loading pending PI data", e);
+                    addRow();
+                }
+            } else {
+                addRow();
+            }
+        };
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>客戶基本資料暨檢索索引系統 (Firebase版) - 銓瑞複材科技</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- 現代化視覺系統設計（沉穩藍灰調） --- */
+        :root {
+            --primary: #2c3e50;
+            --primary-light: #34495e;
+            --accent: #1a237e; 
+            --success: #27ae60;
+            --warning: #f57c00; 
+            --csv-color: #107c41; 
+            --single-json-color: #00838f; /* 個別客戶下載的青色調 */
+            --danger: #c0392b;
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --border: #dcdfe6;
+            --text-main: #2c3e50;
+            --text-muted: #7f8c8d;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+            color: var(--text-main);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* 系統標題 */
+        .system-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 4px solid var(--accent);
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .system-header h1 {
+            margin: 0;
+            color: var(--accent);
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        .connection-status {
+            font-size: 13px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            background: #e2e8f0;
+            color: var(--text-muted);
+        }
+        .connection-status.online {
+            background: #e6f4ea;
+            color: var(--success);
+        }
+
+        /* 頂部功能控制面板 */
+        .control-panel {
+            background: var(--card-bg);
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .search-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-grow: 1;
+            max-width: 500px;
+        }
+        .search-input {
+            flex-grow: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(26,35,126,0.15);
+        }
+        .filter-select {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            background-color: #fff;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.1);
+        }
+        .btn-add { background: var(--success); }
+        .btn-export { background: #673ab7; }
+        .btn-csv { background: var(--csv-color); }
+        .btn-single-json { background: var(--single-json-color); }
+        .btn-import { background: var(--warning); position: relative; }
+        .btn-import input[type="file"] {
+            position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+        }
+
+        /* 雙欄佈局 */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr;
+            gap: 25px;
+            align-items: start;
+        }
+        @media (max-width: 992px) {
+            .main-layout { grid-template-columns: 1fr; }
+        }
+
+        /* 客戶一覽表卡片 */
+        .data-card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+        }
+        .card-title {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .counter-badge {
+            font-size: 12px;
+            background: #f1f5f9;
+            color: var(--primary-light);
+            padding: 3px 8px;
+            border-radius: 12px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-height: 650px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        th, td {
+            padding: 12px 10px;
+            font-size: 13.5px;
+            border-bottom: 1px solid #e2e8f0;
+            word-break: break-all;
+        }
+        th {
+            background: #f8fafc;
+            color: var(--accent);
+            font-weight: 700;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        tbody tr {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        tbody tr:hover {
+            background: #f1f5f9;
+        }
+        tbody tr.selected {
+            background: #e8eaf6;
+            border-left: 4px solid var(--accent);
+        }
+
+        /* 側邊編輯表單 */
+        .form-card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            position: sticky;
+            top: 20px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .form-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--primary-light);
+        }
+        .form-group label span {
+            color: var(--danger);
+            margin-left: 3px;
+        }
+        .form-control {
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-control:focus {
+            border-color: var(--accent);
+        }
+        .form-control[readonly] {
+            background: #f1f5f9;
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .btn-save-form { background: var(--accent); }
+        .btn-delete-form { background: var(--danger); }
+        .btn-clear-form { background: var(--text-muted); }
+
+        /* Toast 提示浮磚 */
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--primary);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 2000;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+    </style>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+    <div style="max-width:1200px;margin:0 auto 16px auto;padding:10px 16px;background:#ffffff;border:1px solid #dbe3ee;border-radius:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center;position:sticky;top:0;z-index:1100;box-shadow:0 6px 18px rgba(15,23,42,0.06);">
+        <a href="index.html" style="text-decoration:none;color:#1a237e;font-weight:700;">Portal Home</a>
+        <a href="CustomerDatabase_firebase.html" style="text-decoration:none;color:#475569;font-weight:700;">客戶資料</a>
+        <a href="quotationV4_firebase.html" style="text-decoration:none;color:#475569;">報價單</a>
+        <a href="ProfomaInvoiceV1_firebase.html" style="text-decoration:none;color:#475569;">PI</a>
+        <a href="shipping%20document_firebase.html" style="text-decoration:none;color:#475569;">出貨單</a>
+        <a href="生產規格確認單V1_firebase.html" style="text-decoration:none;color:#475569;">生產規格</a>
+    </div>
+
+    <div class="container">
+        <div class="system-header">
+            <h1>銓瑞複材科技 - 客戶基本資料暨檢索索引系統</h1>
+            <div id="connStatus" class="connection-status">雲端同步中...</div>
+        </div>
+
+        <div class="control-panel">
+            <div class="search-group">
+                <select id="searchField" class="filter-select">
+                    <option value="all">🔍 智慧全部欄位搜尋</option>
+                    <option value="custName">客戶名稱 (Company)</option>
+                    <option value="customerId">客戶編號 (ID)</option>
+                    <option value="vatNumber">統一編號</option>
+                    <option value="custContact">聯絡人</option>
+                    <option value="custTel">聯絡電話</option>
+                </select>
+                <input type="text" id="searchInput" class="search-input" placeholder="請輸入搜尋關鍵字，下方清單將自動即時篩選...">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-add" onclick="prepareNewCustomer()">＋ 新增客戶</button>
+                <button class="btn btn-export" onclick="exportSharedJSON()">💾 匯出全部 JSON</button>
+                <button class="btn btn-csv" onclick="exportToCSV()">📊 匯出 CSV 檔</button>
+                <button class="btn btn-import">
+                    📂 匯入 JSON 檔
+                    <input type="file" id="importFile" accept=".json" onchange="importSharedJSON(event)">
+                </button>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            
+            <div class="data-card">
+                <div class="card-title">
+                    <span>客戶檢索一覽表</span>
+                    <span id="customerCount" class="counter-badge">總計: 0 筆</span>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 25%">客戶編號</th>
+                                <th style="width: 40%">客戶名稱 / 公司抬頭</th>
+                                <th style="width: 20%">聯絡人員</th>
+                                <th style="width: 15%">統一編號</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerTableBody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                                    正在連線雲端資料庫...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="form-card">
+                <div class="card-title">
+                    <span id="formPurposeTitle">編輯客戶詳細資料</span>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label id="idLabel">客戶編號 (唯一碼 PrimaryKey) <span>*</span></label>
+                        <input type="text" id="cust_customerId" class="form-control" placeholder="例如：CR-2026001">
+                    </div>
+                    <div class="form-group">
+                        <label>客戶名稱 / 公司全銜 (custName) <span>*</span></label>
+                        <input type="text" id="cust_custName" class="form-control" placeholder="請輸入完整發票公司抬頭">
+                    </div>
+                    <div class="form-group">
+                        <label>統一編號 (VAT Number)</label>
+                        <input type="text" id="cust_vatNumber" class="form-control" placeholder="8 位數統一編號">
+                    </div>
+                    <div class="form-group">
+                        <label>聯絡人員 (custContact)</label>
+                        <input type="text" id="cust_custContact" class="form-control" placeholder="主要對接窗口姓名">
+                    </div>
+                    <div class="form-group">
+                        <label>聯絡電話 (custTel)</label>
+                        <input type="text" id="cust_custTel" class="form-control" placeholder="公司電話或聯絡手機">
+                    </div>
+                    <div class="form-group">
+                        <label>傳真號碼 (Fax Number)</label>
+                        <input type="text" id="cust_fax" class="form-control" placeholder="傳真號碼">
+                    </div>
+                    <div class="form-group">
+                        <label>電子郵件 (custEmail)</label>
+                        <input type="text" id="cust_custEmail" class="form-control" placeholder="example@mail.com">
+                    </div>
+                    <div class="form-group">
+                        <label>聯絡地址 (custAddr)</label>
+                        <input type="text" id="cust_custAddr" class="form-control" placeholder="完整的出貨或發票寄送地址">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-clear-form" onclick="clearForm()">取消</button>
+                    <button id="btnDelete" class="btn btn-delete-form" style="display:none;" onclick="deleteCustomer()">刪除</button>
+                    
+                    <button id="btnExportSingle" class="btn btn-single-json" style="display:none;" onclick="exportSingleCustomerJSON()">📥 匯出此客戶 JSON</button>
+                    
+                    <button class="btn btn-save-form" onclick="saveCustomerForm()">儲存資料</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="toast">提示訊息</div>
+
+    <script>
+        // --- 1. FIREBASE 設定 ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyB9eYIZv8i2c_ljAMoio8csB2-RKWMwmMQ",
+            authDomain: "windner-document.firebaseapp.com",
+            databaseURL: "https://windner-document-default-rtdb.firebaseio.com", 
+            projectId: "windner-document",
+            storageBucket: "windner-document.firebasestorage.app",
+            messagingSenderId: "285395707143",
+            appId: "1:285395707143:web:b23ba25a15e3cc099f11a2",
+            measurementId: "G-GKJQ6NR9NV"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let customerDatabase = {};  
+        let selectedCustomerId = null; 
+        let isEditMode = false;     
+
+        // --- 2. 系統初始化 ---
+        window.onload = () => {
+            db.ref("customers").on("value", (snapshot) => {
+                const data = snapshot.val();
+                customerDatabase = data ? data : {};
+                renderTable();
+                
+                document.getElementById('connStatus').innerText = "🟢 雲端即時連線中";
+                document.getElementById('connStatus').className = "connection-status online";
+            }, (error) => {
+                console.error(error);
+                document.getElementById('connStatus').innerText = "🔴 連線失敗";
+                document.getElementById('connStatus').className = "connection-status";
+            });
+
+            document.getElementById('searchInput').addEventListener('input', renderTable);
+            document.getElementById('searchField').addEventListener('change', renderTable);
+            
+            prepareNewCustomer();
+        };
+
+        // --- 3. 渲染清單 ---
+        function renderTable() {
+            const tbody = document.getElementById('customerTableBody');
+            const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+            const searchField = document.getElementById('searchField').value;
+            
+            tbody.innerHTML = "";
+            let matchCount = 0;
+            const keys = Object.keys(customerDatabase);
+
+            keys.forEach(id => {
+                const c = customerDatabase[id];
+                let isMatch = false;
+
+                const c_id = (c.customerId || "").toLowerCase();
+                const c_name = (c.custName || "").toLowerCase();
+                const c_contact = (c.custContact || "").toLowerCase();
+                const c_tel = (c.custTel || "").toLowerCase();
+                const c_vat = (c.vatNumber || "").toLowerCase();
+
+                if (keyword === "") {
+                    isMatch = true;
+                } else {
+                    if (searchField === "all") {
+                        if (c_id.includes(keyword) || c_name.includes(keyword) || 
+                            c_contact.includes(keyword) || c_tel.includes(keyword) || c_vat.includes(keyword)) {
+                            isMatch = true;
+                        }
+                    } else if (searchField === "custName" && c_name.includes(keyword)) {
+                        isMatch = true;
+                    } else if (searchField === "customerId" && c_id.includes(keyword)) {
+                        isMatch = true;
+                    } else if (searchField === "vatNumber" && c_vat.includes(keyword)) {
+                        isMatch = true;
+                    } else if (searchField === "custContact" && c_contact.includes(keyword)) {
+                        isMatch = true;
+                    } else if (searchField === "custTel" && c_tel.includes(keyword)) {
+                        isMatch = true;
+                    }
+                }
+
+                if (isMatch) {
+                    matchCount++;
+                    const tr = document.createElement('tr');
+                    if (selectedCustomerId === id) tr.className = "selected";
+
+                    tr.innerHTML = `
+                        <td style="font-weight:700; color:#1a237e;">${escapeHtml(c.customerId)}</td>
+                        <td style="font-weight:500;">${escapeHtml(c.custName)}</td>
+                        <td>${escapeHtml(c.custContact || '-')}</td>
+                        <td>${escapeHtml(c.vatNumber || '-')}</td>
+                    `;
+
+                    tr.onclick = () => selectCustomer(id);
+                    tbody.appendChild(tr);
+                }
+            });
+
+            document.getElementById('customerCount').innerText = `總計: ${matchCount} / ${keys.length} 筆`;
+            if (matchCount === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 40px;">找不到符合搜尋條件的客戶資料。</td></tr>`;
+            }
+        }
+
+        // --- 4. 表單切換運作 ---
+        function prepareNewCustomer() {
+            selectedCustomerId = null;
+            isEditMode = false;
+            clearFormFields();
+
+            document.getElementById('formPurposeTitle').innerText = "✨ 新增客戶基本資料";
+            document.getElementById('cust_customerId').readOnly = false;
+            document.getElementById('idLabel').innerHTML = '客戶編號 (唯一碼 PrimaryKey) <span>*</span>';
+            document.getElementById('btnDelete').style.display = 'none';
+            document.getElementById('btnExportSingle').style.display = 'none'; // 新增狀態隱藏單一匯出按鈕
+
+            const rows = document.querySelectorAll('#customerTableBody tr');
+            rows.forEach(r => r.classList.remove('selected'));
+        }
+
+        function selectCustomer(id) {
+            if (!customerDatabase[id]) return;
+            selectedCustomerId = id;
+            isEditMode = true;
+
+            const c = customerDatabase[id];
+            document.getElementById('formPurposeTitle').innerText = "📝 編輯客戶詳細資料";
+            
+            document.getElementById('cust_customerId').value = c.customerId || "";
+            document.getElementById('cust_customerId').readOnly = true; 
+            document.getElementById('idLabel').innerHTML = '客戶編號 (唯一碼，無法變更)';
+
+            document.getElementById('cust_custName').value = c.custName || "";
+            document.getElementById('cust_vatNumber').value = c.vatNumber || "";
+            document.getElementById('cust_custContact').value = c.custContact || "";
+            document.getElementById('cust_custTel').value = c.custTel || "";
+            document.getElementById('cust_fax').value = c.fax || "";
+            document.getElementById('cust_custEmail').value = c.custEmail || "";
+            document.getElementById('cust_custAddr').value = c.custAddr || "";
+
+            document.getElementById('btnDelete').style.display = 'inline-block';
+            document.getElementById('btnExportSingle').style.display = 'inline-block'; // 編輯狀態顯示單一匯出按鈕
+            renderTable();
+        }
+
+        function clearFormFields() {
+            document.getElementById('cust_customerId').value = "";
+            document.getElementById('cust_custName').value = "";
+            document.getElementById('cust_vatNumber').value = "";
+            document.getElementById('cust_custContact').value = "";
+            document.getElementById('cust_custTel').value = "";
+            document.getElementById('cust_fax').value = "";
+            document.getElementById('cust_custEmail').value = "";
+            document.getElementById('cust_custAddr').value = "";
+        }
+
+        function clearForm() {
+            prepareNewCustomer();
+        }
+
+        // --- 5. Firebase 資料庫維護 ---
+        function saveCustomerForm() {
+            const id = document.getElementById('cust_customerId').value.trim();
+            const name = document.getElementById('cust_custName').value.trim();
+            const vat = document.getElementById('cust_vatNumber').value.trim();
+            const contact = document.getElementById('cust_custContact').value.trim();
+            const tel = document.getElementById('cust_custTel').value.trim();
+            const fax = document.getElementById('cust_fax').value.trim();
+            const email = document.getElementById('cust_custEmail').value.trim();
+            const addr = document.getElementById('cust_custAddr').value.trim();
+
+            if (!id) { alert("請填寫客戶編號！"); return; }
+            if (!name) { alert("請填寫客戶名稱/公司抬頭！"); return; }
+
+            if (!isEditMode && customerDatabase[id]) {
+                alert(`客戶編號 [${id}] 已經存在雲端系統中。`);
+                return;
+            }
+
+            const customerObj = {
+                customerId: id,
+                custName: name,
+                vatNumber: vat,
+                custContact: contact,
+                custTel: tel,
+                fax: fax,
+                custEmail: email,
+                custAddr: addr,
+                lastUpdated: new Date().toISOString()
+            };
+
+            db.ref("customers/" + id).set(customerObj)
+                .then(() => {
+                    showToast(isEditMode ? "🎉 客戶雲端資料已順利更新！" : "🎉 全新客戶已同步新增至雲端！");
+                    prepareNewCustomer();
+                })
+                .catch((err) => { alert("儲存失敗: " + err.message); });
+        }
+
+        function deleteCustomer() {
+            if (!selectedCustomerId) return;
+            const targetName = customerDatabase[selectedCustomerId].custName;
+
+            if (confirm(`⚠️ 確定要從雲端「永久移除」客戶：\n[${targetName}] 嗎？`)) {
+                db.ref("customers/" + selectedCustomerId).remove()
+                    .then(() => {
+                        showToast("🗑️ 客戶資料已自雲端資料庫中移除。");
+                        prepareNewCustomer();
+                    })
+                    .catch((err) => { alert("刪除失敗: " + err.message); });
+            }
+        }
+
+        // --- 6. 核心精準功能：個別下載「單一客戶」JSON 檔案至本地電腦 ---
+        function exportSingleCustomerJSON() {
+            if (!selectedCustomerId || !customerDatabase[selectedCustomerId]) {
+                alert("請先在左側列表中選擇一位客戶！");
+                return;
+            }
+            
+            const singleCustomer = customerDatabase[selectedCustomerId];
+            
+            // 包裝成標準共用格式 (以該客戶 id 作為外層鍵，內層放資料物件)
+            const exportWrapper = {};
+            exportWrapper[selectedCustomerId] = singleCustomer;
+
+            // 將 JSON 轉為瀏覽器可下載的資料串
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportWrapper, null, 4));
+            const dlAnchor = document.createElement('a');
+            
+            // 清除作業系統不合規的檔名特殊符號
+            const safeCompanyName = singleCustomer.custName.replace(/[\\/:*?"<>|]/g, "_");
+            
+            dlAnchor.setAttribute("href", dataStr);
+            // 檔名格式如：客戶檔_CR-2026001_銓瑞複材科技.json
+            dlAnchor.setAttribute("download", `客戶檔_${singleCustomer.customerId}_${safeCompanyName}.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+            
+            showToast(`📥 成功導出個別客戶 [${singleCustomer.custName}] 的 JSON 檔案！`);
+        }
+
+        // --- 7. 其他傳統全資料導出 (CSV / 全部JSON) ---
+        function exportToCSV() {
+            const keys = Object.keys(customerDatabase);
+            if (keys.length === 0) { alert("無資料可導出。"); return; }
+
+            const headers = ["客戶編號", "客戶名稱/公司全銜", "統一編號", "聯絡人", "聯絡電話", "傳真號碼", "電子郵件", "聯絡地址", "最後更新時間"];
+            let csvRows = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",")];
+
+            keys.forEach(id => {
+                const c = customerDatabase[id];
+                const rowData = [c.customerId||"", c.custName||"", c.vatNumber||"", c.custContact||"", c.custTel||"", c.fax||"", c.custEmail||"", c.custAddr||"", c.lastUpdated||""];
+                csvRows.push(rowData.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+            });
+
+            const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", url);
+            dlAnchor.setAttribute("download", `客戶資料表_${new Date().toISOString().slice(0,10).replace(/-/g,"")}.csv`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            document.body.removeChild(dlAnchor);
+            showToast("📊 CSV 報表已成功下載");
+        }
+
+        function exportSharedJSON() {
+            if (Object.keys(customerDatabase).length === 0) { alert("無資料可導出。"); return; }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(customerDatabase, null, 4));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `客戶共用標準完整檔_${new Date().toISOString().slice(0,10).replace(/-/g,"")}.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+            showToast("💾 完整資料庫 JSON 下載成功");
+        }
+
+        function importSharedJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    const keys = Object.keys(imported);
+                    let cleanedData = {};
+                    keys.forEach((key, index) => {
+                        let oldItem = imported[key];
+                        let id = oldItem.customerId || oldItem.id || key || `CUST-${index}`;
+                        cleanedData[id] = {
+                            customerId: id,
+                            custName: oldItem.custName || oldItem.company || "未命名",
+                            vatNumber: oldItem.vatNumber || "",
+                            custContact: oldItem.custContact || "",
+                            custTel: oldItem.custTel || "",
+                            fax: oldItem.fax || "",
+                            custEmail: oldItem.custEmail || "",
+                            custAddr: oldItem.custAddr || "",
+                            lastUpdated: new Date().toISOString()
+                        };
+                    });
+                    if (confirm(`確認匯入 ${keys.length} 筆客戶資料？`)) {
+                        db.ref("customers").update(cleanedData).then(() => {
+                            showToast("🚀 資料導入並雲端同步完成！");
+                        });
+                    }
+                } catch(err) { alert("格式錯誤: " + err.message); }
+            };
+            reader.readAsText(file);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById("toast");
+            toast.innerText = msg;
+            toast.classList.add("show");
+            setTimeout(() => { toast.classList.remove("show"); }, 3000);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return "";
+            return String(str).replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[m]));
+        }
+    </script>
+</body>
+</html>
