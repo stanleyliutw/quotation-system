@@ -78,6 +78,7 @@
         .btn-save { background: var(--primary); }
         .btn-load { background: var(--warning); }
         .btn-load-formal { background: #0f766e; }
+        .btn-customer { background: #0f766e; }
         .btn-print { background: var(--accent); }
         .btn-reset { background: var(--text-muted); }
         .btn-cloud-save { background: #673ab7; }
@@ -387,6 +388,7 @@
         <button class="btn btn-load" onclick="document.getElementById('loadFile').click()"><span>📂</span> 載入資料檔</button>
         <input type="file" id="loadFile" style="display:none" onchange="loadData(this)" accept=".json">
         <button class="btn btn-load-formal" onclick="openFormalOrderModal()"><span>📑</span> Load Formal Order</button>
+        <button class="btn btn-customer" onclick="openCustomerModal()"><span>👤</span> Load Customer</button>
         
         <!-- Firebase 雲端按鈕 -->
         <button class="btn btn-cloud-save" onclick="saveToCloud()"><span>☁️</span> 雲端儲存</button>
@@ -582,8 +584,40 @@
     <div id="toast">已成功儲存！</div>
 
     <!-- Firebase SDK 引入 (Compat 模式，相容本機 file:// 協議免 CORS 限制) -->
+    <div id="customerSelectModal" class="fb-modal">
+        <div class="fb-modal-content" style="max-width:980px;">
+            <div class="fb-modal-header">
+                <h3>Load Customer</h3>
+                <span class="fb-close" onclick="closeCustomerModal()">&times;</span>
+            </div>
+            <div class="fb-modal-body">
+                <div class="fb-search-bar">
+                    <input type="text" id="customerSearchInput" placeholder="Search customer id / name / contact / tel / email" oninput="filterCustomerList()">
+                </div>
+                <div class="fb-table-container" style="max-height:55vh;">
+                    <table id="customerSelectTable">
+                        <thead>
+                            <tr>
+                                <th>Customer ID</th>
+                                <th>Name</th>
+                                <th>Contact</th>
+                                <th>Tel/Fax</th>
+                                <th>Email</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerSelectList">
+                            <tr><td colspan="6" style="text-align:center;">Loading customers...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyB9eYIZv8i2c_ljAMoio8csB2-RKWMwmMQ",
@@ -598,8 +632,114 @@
         // 初始化 Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const rtdb = firebase.database();
         let formalOrderDocuments = [];
         let currentFormalOrder = null;
+
+        function escapeHtml(text) {
+            return String(text || "").replace(/[&<>"']/g, match => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[match]));
+        }
+
+        function applyCustomerToShipping(customer) {
+            if (!customer) return;
+            document.getElementById('custName').value = customer.custName || '';
+            document.getElementById('custContact').value = customer.custContact || '';
+            document.getElementById('custTaxID').value = customer.vatNumber || customer.customerTaxId || '';
+            document.getElementById('custTelFax').value = customer.custTel || customer.custTelFax || '';
+            document.getElementById('custAddr').value = customer.custAddr || '';
+        }
+
+        async function loadCustomerCache() {
+            const snap = await rtdb.ref('customers').once('value');
+            const data = snap.val() || {};
+            customerCache = Object.keys(data).map(id => ({ id, ...data[id] }));
+            return customerCache;
+        }
+
+        function renderCustomerPicker(rows) {
+            const tbody = document.getElementById('customerSelectList');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            if (!rows || rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">No matching customers.</td></tr>';
+                return;
+            }
+            rows.forEach(customer => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${escapeHtml(customer.customerId)}</td>
+                    <td>${escapeHtml(customer.custName)}</td>
+                    <td>${escapeHtml(customer.custContact)}</td>
+                    <td>${escapeHtml(customer.custTel || customer.custTelFax)}</td>
+                    <td>${escapeHtml(customer.custEmail)}</td>
+                    <td><button class="btn btn-customer" style="padding:6px 10px;font-size:12px;" onclick="useCustomerForShipping(${JSON.stringify(customer.id)})">Use</button></td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function refreshCustomerPicker() {
+            if (!customerCache.length) {
+                await loadCustomerCache();
+            }
+            renderCustomerPicker(customerCache);
+        }
+
+        window.openCustomerModal = async function() {
+            const modal = document.getElementById('customerSelectModal');
+            if (modal) modal.style.display = 'flex';
+            const input = document.getElementById('customerSearchInput');
+            if (input) input.value = '';
+            await refreshCustomerPicker();
+        };
+
+        window.closeCustomerModal = function() {
+            const modal = document.getElementById('customerSelectModal');
+            if (modal) modal.style.display = 'none';
+        };
+
+        window.filterCustomerList = function() {
+            const q = (document.getElementById('customerSearchInput')?.value || '').trim().toLowerCase();
+            const filtered = customerCache.filter(c => (
+                (c.customerId || '').toLowerCase().includes(q) ||
+                (c.custName || '').toLowerCase().includes(q) ||
+                (c.custContact || '').toLowerCase().includes(q) ||
+                (c.custTel || '').toLowerCase().includes(q) ||
+                (c.custEmail || '').toLowerCase().includes(q) ||
+                (c.custAddr || '').toLowerCase().includes(q)
+            ));
+            renderCustomerPicker(filtered);
+        };
+
+        window.useCustomerForShipping = function(id) {
+            const customer = customerCache.find(c => c.id === id);
+            if (!customer) return;
+            applyCustomerToShipping(customer);
+            localStorage.setItem('pendingCustomerImport', JSON.stringify({
+                source: 'customer-database',
+                target: 'shipping',
+                customer
+            }));
+            closeCustomerModal();
+        };
+
+        function applyPendingCustomerImport() {
+            const pending = localStorage.getItem('pendingCustomerImport');
+            if (!pending) return;
+            try {
+                const payload = JSON.parse(pending);
+                if (payload?.customer) applyCustomerToShipping(payload.customer);
+            } catch (error) {
+                console.error('Failed to apply pending customer', error);
+            }
+            localStorage.removeItem('pendingCustomerImport');
+        }
+        let customerCache = [];
 
         // 將重要函式掛載至 window 供 HTML 按鈕使用
         window.saveToCloud = async function() {
@@ -1205,6 +1345,7 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initResizableColumns();
+            applyPendingCustomerImport();
         });
         initResizableColumns();
     </script>

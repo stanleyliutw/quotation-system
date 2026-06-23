@@ -85,6 +85,7 @@
         .btn-print { background: var(--primary-color); color: white; }
         .btn-cloud-save { background: #e91e63; color: white; }
         .btn-cloud-load { background: #009688; color: white; }
+        .btn-customer { background: #0f766e; color: white; }
 
         /* A4 容器主體 */
         .page {
@@ -455,6 +456,20 @@
         #fbHistoryTable { width: 100%; border-collapse: collapse; }
         #fbHistoryTable th, #fbHistoryTable td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
         #fbHistoryTable th { background: #f8fafc; font-weight: 600; color: var(--primary-color); }
+        .customer-select-table { width: 100%; border-collapse: collapse; }
+        .customer-select-table th, .customer-select-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+        .customer-select-table th { background: #f8fafc; font-weight: 600; color: var(--primary-color); position: sticky; top: 0; }
+        .customer-select-table tr:hover { background: #f8fbff; }
+        .customer-use-btn {
+            border: none;
+            padding: 7px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--success-color);
+            color: #fff;
+        }
         .fb-btn-load { background: var(--success-color); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; }
         .fb-btn-delete { background: #fee2e2; color: #c62828; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; margin-left: 8px; }
         .fb-btn-delete:hover { background: #c62828; color: white; }
@@ -502,6 +517,7 @@
         
         <button class="btn btn-cloud-save" onclick="saveToCloud()">☁️ 雲端儲存</button>
         <button class="btn btn-cloud-load" onclick="openHistoryModal()">📁 雲端歷史紀錄</button>
+        <button id="btnCustomerLoad" class="btn btn-customer" onclick="openCustomerModal()">Load Customer</button>
 
         <button class="btn btn-ics" onclick="generateICS()">📅 加入日曆 (ICS)</button>
         <button class="btn btn-print" onclick="window.print()">🖨️ 列印 A4 PDF</button>
@@ -629,6 +645,7 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
     <script>
         const firebaseConfig = {
@@ -644,7 +661,170 @@
         // 初始化 Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const rtdb = firebase.database();
         const storage = firebase.storage();
+        let customerCache = [];
+
+        function applyCustomerToQuotation(customer) {
+            if (!customer) return;
+            document.getElementById('custName').value = customer.custName || "";
+            document.getElementById('custContact').value = customer.custContact || "";
+            document.getElementById('custTel').value = customer.custTel || "";
+            document.getElementById('custEmail').value = customer.custEmail || "";
+            document.getElementById('custAddr').value = customer.custAddr || "";
+        }
+
+        function escapeHtml(text) {
+            return String(text || "").replace(/[&<>"']/g, match => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[match]));
+        }
+
+        function injectCustomerControls() {
+            const btnArea = document.querySelector('.btn-area');
+            if (btnArea && !document.getElementById('btnCustomerLoad')) {
+                const btn = document.createElement('button');
+                btn.id = 'btnCustomerLoad';
+                btn.className = 'btn btn-customer';
+                btn.type = 'button';
+                btn.textContent = 'Load Customer';
+                btn.onclick = openCustomerModal;
+                const refBtn = btnArea.querySelector('.btn-ics') || btnArea.lastElementChild;
+                btnArea.insertBefore(btn, refBtn);
+            }
+
+            if (!document.getElementById('customerSelectModal')) {
+                const modal = document.createElement('div');
+                modal.id = 'customerSelectModal';
+                modal.className = 'fb-modal';
+                modal.innerHTML = `
+                    <div class="fb-modal-content" style="max-width:980px;">
+                        <div class="fb-modal-header">
+                            <h3>Customer Picker</h3>
+                            <span class="fb-close" onclick="closeCustomerModal()">&times;</span>
+                        </div>
+                        <div class="fb-modal-body">
+                            <div class="fb-search-bar">
+                                <input type="text" id="customerSearchInput" placeholder="Search customer id / name / contact / tel / email" oninput="filterCustomerList()">
+                            </div>
+                            <div style="font-size:12px;color:var(--text-light);">Pick a customer to fill the quotation form.</div>
+                            <div class="fb-table-container" style="max-height:55vh;">
+                                <table class="customer-select-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:14%;">Customer ID</th>
+                                            <th style="width:20%;">Name</th>
+                                            <th style="width:18%;">Contact</th>
+                                            <th style="width:16%;">Tel</th>
+                                            <th style="width:20%;">Email</th>
+                                            <th style="width:12%;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="customerSelectList">
+                                        <tr><td colspan="6" style="text-align:center;">Loading customers...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+            }
+        }
+
+        async function loadCustomerCache() {
+            const snap = await rtdb.ref("customers").once("value");
+            const data = snap.val() || {};
+            customerCache = Object.keys(data).map(id => ({ id, ...data[id] }));
+            return customerCache;
+        }
+
+        function renderCustomerPicker(rows) {
+            const tbody = document.getElementById('customerSelectList');
+            if (!tbody) return;
+            tbody.innerHTML = "";
+            if (!rows || rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:24px;">No matching customers.</td></tr>`;
+                return;
+            }
+            rows.forEach(customer => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${escapeHtml(customer.customerId)}</td>
+                    <td>${escapeHtml(customer.custName)}</td>
+                    <td>${escapeHtml(customer.custContact)}</td>
+                    <td>${escapeHtml(customer.custTel)}</td>
+                    <td>${escapeHtml(customer.custEmail)}</td>
+                    <td>
+                        <button class="customer-use-btn" onclick='useCustomerForQuotation(${JSON.stringify(customer.id)})'>Use</button>
+                    </td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function refreshCustomerPicker() {
+            if (!customerCache.length) {
+                await loadCustomerCache();
+            }
+            renderCustomerPicker(customerCache);
+        }
+
+        function applyPendingCustomerImport() {
+            const pending = localStorage.getItem('pendingCustomerImport');
+            if (!pending) return;
+            try {
+                const payload = JSON.parse(pending);
+                if (payload && payload.customer) {
+                    applyCustomerToQuotation(payload.customer);
+                }
+            } catch (error) {
+                console.error("Failed to apply pending customer", error);
+            }
+            localStorage.removeItem('pendingCustomerImport');
+        }
+
+        window.openCustomerModal = async function() {
+            injectCustomerControls();
+            const modal = document.getElementById('customerSelectModal');
+            if (modal) modal.style.display = 'flex';
+            const search = document.getElementById('customerSearchInput');
+            if (search) search.value = '';
+            await refreshCustomerPicker();
+        };
+
+        window.closeCustomerModal = function() {
+            const modal = document.getElementById('customerSelectModal');
+            if (modal) modal.style.display = 'none';
+        };
+
+        window.filterCustomerList = function() {
+            const input = document.getElementById('customerSearchInput');
+            const query = (input ? input.value : '').trim().toLowerCase();
+            const filtered = customerCache.filter(c => (
+                (c.customerId || "").toLowerCase().includes(query) ||
+                (c.custName || "").toLowerCase().includes(query) ||
+                (c.custContact || "").toLowerCase().includes(query) ||
+                (c.custTel || "").toLowerCase().includes(query) ||
+                (c.custEmail || "").toLowerCase().includes(query) ||
+                (c.custAddr || "").toLowerCase().includes(query)
+            ));
+            renderCustomerPicker(filtered);
+        };
+
+        window.useCustomerForQuotation = function(id) {
+            const customer = customerCache.find(c => c.id === id);
+            if (!customer) return;
+            applyCustomerToQuotation(customer);
+            localStorage.setItem('pendingCustomerImport', JSON.stringify({
+                source: 'customer-database',
+                target: 'quotation',
+                customer
+            }));
+            closeCustomerModal();
+        };
 
         // ⚡【精準修復】雲端儲存報價單：跳過 Firebase Storage 上傳步驟，徹底防止大檔案卡死
         window.saveToCloud = async function() {
@@ -1243,6 +1423,7 @@
         }
 
         window.onload = () => {
+            injectCustomerControls();
             const importedData = localStorage.getItem('importQuoteItems');
             if (importedData) {
                 try {
@@ -1262,6 +1443,7 @@
             } else {
                 addRow();
             }
+            applyPendingCustomerImport();
             initResizableColumns();
             initAttachmentUpload();
         };
