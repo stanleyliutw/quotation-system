@@ -77,6 +77,7 @@
         .btn-add { background: var(--success); }
         .btn-save { background: var(--primary); }
         .btn-load { background: var(--warning); }
+        .btn-load-formal { background: #0f766e; }
         .btn-print { background: var(--accent); }
         .btn-reset { background: var(--text-muted); }
         .btn-cloud-save { background: #673ab7; }
@@ -380,20 +381,12 @@
 </head>
 <body>
 
-    <div style="max-width:210mm;margin:0 auto 14px auto;padding:10px 16px;background:#ffffff;border:1px solid #dbe3ee;border-radius:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center;position:sticky;top:0;z-index:1100;box-shadow:0 6px 18px rgba(15,23,42,0.06);">
-        <a href="index.html" style="text-decoration:none;color:#1a237e;font-weight:700;">Portal Home</a>
-        <a href="CustomerDatabase_firebase.html" style="text-decoration:none;color:#475569;">客戶資料</a>
-        <a href="quotationV4_firebase.html" style="text-decoration:none;color:#475569;">報價單</a>
-        <a href="ProfomaInvoiceV1_firebase.html" style="text-decoration:none;color:#475569;">PI</a>
-        <a href="shipping%20document_firebase.html" style="text-decoration:none;color:#475569;font-weight:700;">出貨單</a>
-        <a href="生產規格確認單V1_firebase.html" style="text-decoration:none;color:#475569;">生產規格</a>
-    </div>
-
     <div class="btn-area">
         <button class="btn btn-add" onclick="addRow()"><span>＋</span> 新增產品</button>
         <button class="btn btn-save" onclick="saveData()"><span>💾</span> 下載資料檔</button>
         <button class="btn btn-load" onclick="document.getElementById('loadFile').click()"><span>📂</span> 載入資料檔</button>
         <input type="file" id="loadFile" style="display:none" onchange="loadData(this)" accept=".json">
+        <button class="btn btn-load-formal" onclick="openFormalOrderModal()"><span>📑</span> Load Formal Order</button>
         
         <!-- Firebase 雲端按鈕 -->
         <button class="btn btn-cloud-save" onclick="saveToCloud()"><span>☁️</span> 雲端儲存</button>
@@ -554,6 +547,38 @@
         </div>
     </div>
 
+    <div id="formalOrderModal" class="fb-modal">
+        <div class="fb-modal-content">
+            <div class="fb-modal-header">
+                <h3>Load Formal Order</h3>
+                <span class="fb-close" onclick="closeFormalOrderModal()">&times;</span>
+            </div>
+            <div class="fb-modal-body">
+                <div class="fb-search-bar">
+                    <input type="text" id="formalOrderSearch" placeholder="Search PI no., quote ref, or customer..." oninput="filterFormalOrders()">
+                </div>
+                <div class="fb-table-container">
+                    <table id="formalOrderTable">
+                        <thead>
+                            <tr>
+                                <th>PI No.</th>
+                                <th>Quote Ref</th>
+                                <th>Customer</th>
+                                <th>Date</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="formalOrderList">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast">已成功儲存！</div>
 
     <!-- Firebase SDK 引入 (Compat 模式，相容本機 file:// 協議免 CORS 限制) -->
@@ -573,6 +598,8 @@
         // 初始化 Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        let formalOrderDocuments = [];
+        let currentFormalOrder = null;
 
         // 將重要函式掛載至 window 供 HTML 按鈕使用
         window.saveToCloud = async function() {
@@ -618,6 +645,8 @@
                 invId: document.getElementById('invId').value,
                 invType: document.getElementById('invType').value,
                 invIncluded: document.getElementById('invIncluded').checked,
+                sourceOrderType: currentFormalOrder?.type || '',
+                sourceOrderId: currentFormalOrder?.id || document.getElementById('poId').value,
                 items: items,
                 updatedAt: new Date().toISOString()
             };
@@ -630,6 +659,138 @@
                 alert("雲端儲存失敗: " + error.message);
             }
         };
+
+
+        function buildFormalOrderRows(sourceId, items) {
+            const tbody = document.querySelector('#itemTable tbody');
+            tbody.innerHTML = '';
+
+            if (items && items.length > 0) {
+                items.forEach(function(item, index) {
+                    const row = tbody.insertRow();
+                    row.innerHTML = '<td class="no-print" style="text-align:center;"><button class="btn-del" onclick="delRow(this)">\u522a\u9664</button></td>' +
+                        '<td><div contenteditable="true" class="editable-cell item-id">' + (item.id || (sourceId + '-' + String(index + 1).padStart(2, '0'))) + '</div></td>' +
+                        '<td><div contenteditable="true" class="editable-cell item-name">' + (item.name || '') + '</div></td>' +
+                        '<td><div contenteditable="true" class="editable-cell item-spec">' + (item.spec || '') + '</div></td>' +
+                        '<td><input type="number" class="num-input qty" value="' + (item.qty || 0) + '" oninput="calc()"></td>' +
+                        '<td><input type="number" class="num-input price" value="' + (item.price || 0) + '" oninput="calc()"></td>' +
+                        '<td><input type="text" class="num-input subtotal" value="0" readonly></td>' +
+                        '<td><div contenteditable="true" class="editable-cell item-note">' + (item.note || '') + '</div></td>';
+                });
+            } else {
+                addRow();
+            }
+            calc();
+        }
+
+        function applyFormalOrderToShipping(d) {
+            currentFormalOrder = {
+                type: 'proforma_invoices',
+                id: d.piId || d.quoteRef || ''
+            };
+
+            document.getElementById('poId').value = d.piId || d.quoteRef || '';
+            document.getElementById('custName').value = d.custName || '';
+            document.getElementById('custContact').value = d.custContact || '';
+            document.getElementById('custTelFax').value = d.custTel || '';
+            document.getElementById('custAddr').value = d.custAddr || '';
+
+            if (!document.getElementById('shipDate').value) {
+                document.getElementById('shipDate').value = new Date().toISOString().slice(0, 10);
+            }
+
+            const sourceId = d.piId || d.quoteRef || 'formal-order';
+            const notes = [];
+            if (d.piId) notes.push('PI: ' + d.piId);
+            if (d.quoteRef) notes.push('Quote: ' + d.quoteRef);
+            if (d.notes) notes.push(d.notes);
+            document.getElementById('topNote').value = notes.join(' | ') || ('Source: ' + sourceId);
+
+            const items = Array.isArray(d.items) ? d.items.map(function(item, index) {
+                return {
+                    id: item.id || (sourceId + '-' + String(index + 1).padStart(2, '0')),
+                    name: item.prodName || item.name || '',
+                    spec: item.matSpec || item.spec || '',
+                    qty: item.qty || 0,
+                    price: item.price || 0,
+                    note: item.note || ''
+                };
+            }) : [];
+
+            buildFormalOrderRows(sourceId, items);
+            closeFormalOrderModal();
+            showToast('Formal order loaded', '#0f766e');
+        }
+
+        function renderFormalOrderList(docs) {
+            const listContainer = document.getElementById('formalOrderList');
+            if (docs.length === 0) {
+                listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;">No formal orders found</td></tr>';
+                return;
+            }
+
+            listContainer.innerHTML = '';
+            docs.forEach(function(d) {
+                const tr = document.createElement('tr');
+                const docDate = d.date || d.currentDate || '';
+                const piId = d.piId || '';
+                tr.innerHTML = '<td><strong>' + piId + '</strong></td>' +
+                    '<td>' + (d.quoteRef || 'N/A') + '</td>' +
+                    '<td>' + (d.custName || 'N/A') + '</td>' +
+                    '<td>' + (docDate || 'N/A') + '</td>' +
+                    '<td><button class="fb-btn-load" onclick="loadFormalOrderDocument(\'' + piId + '\')">Load</button></td>';
+                listContainer.appendChild(tr);
+            });
+        }
+
+        window.openFormalOrderModal = async function() {
+            document.getElementById('formalOrderModal').style.display = 'flex';
+            const listContainer = document.getElementById('formalOrderList');
+            listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading...</td></tr>';
+            document.getElementById('formalOrderSearch').value = '';
+
+            try {
+                const querySnapshot = await db.collection('proforma_invoices').orderBy('updatedAt', 'desc').get();
+                formalOrderDocuments = [];
+                querySnapshot.forEach(function(doc) {
+                    formalOrderDocuments.push(doc.data());
+                });
+                renderFormalOrderList(formalOrderDocuments);
+            } catch (error) {
+                console.error('Error fetching formal orders:', error);
+                listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;color:red;">Load failed: ' + error.message + '</td></tr>';
+            }
+        };
+
+        window.filterFormalOrders = function() {
+            const queryVal = document.getElementById('formalOrderSearch').value.toLowerCase();
+            const filtered = formalOrderDocuments.filter(function(d) {
+                return (d.piId && d.piId.toLowerCase().includes(queryVal)) ||
+                    (d.quoteRef && d.quoteRef.toLowerCase().includes(queryVal)) ||
+                    (d.custName && d.custName.toLowerCase().includes(queryVal));
+            });
+            renderFormalOrderList(filtered);
+        };
+
+        window.loadFormalOrderDocument = async function(id) {
+            if (!confirm('Load this formal order and overwrite the current shipping sheet?')) return;
+
+            try {
+                const docSnap = await db.collection('proforma_invoices').doc(id).get();
+                if (docSnap.exists) {
+                    applyFormalOrderToShipping(docSnap.data());
+                } else {
+                    alert('Formal order not found.');
+                }
+            } catch (error) {
+                console.error('Error loading formal order:', error);
+                alert('Failed to load formal order: ' + error.message);
+            }
+        };
+
+        function closeFormalOrderModal() {
+            document.getElementById('formalOrderModal').style.display = 'none';
+        }
 
         let cloudDocuments = [];
 
@@ -716,6 +877,8 @@
                     document.getElementById('invId').value = d.invId || "";
                     document.getElementById('invType').value = d.invType || "";
                     document.getElementById('invIncluded').checked = d.invIncluded || false;
+                    
+                    currentFormalOrder = d.sourceOrderId ? { type: d.sourceOrderType || 'proforma_invoices', id: d.sourceOrderId } : null;
                     
                     // 還原產品列
                     const tbody = document.querySelector("#itemTable tbody");
@@ -866,18 +1029,20 @@
                 invId: document.getElementById('invId').value,
                 invType: document.getElementById('invType').value,
                 invIncluded: document.getElementById('invIncluded').checked,
+                sourceOrderType: currentFormalOrder?.type || '',
+                sourceOrderId: currentFormalOrder?.id || document.getElementById('poId').value,
                 items: items
             };
 
             const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
             const a = document.createElement("a");
             const dateStr = data.shipDate || new Date().toISOString().split('T')[0];
-            const nameStr = data.custName || '未命名';
+            const nameStr = data.custName || 'shipping';
             
             a.href = URL.createObjectURL(blob);
             a.download = `出貨單_${nameStr}_${dateStr}.json`;
             a.click();
-            showToast("檔案下載中...", "#2c3e50");
+            showToast("JSON download started", "#2c3e50");
         }
 
         // 載入資料 (上傳 JSON)
@@ -912,6 +1077,8 @@
                     document.getElementById('invId').value = d.invId || "";
                     document.getElementById('invType').value = d.invType || "";
                     document.getElementById('invIncluded').checked = d.invIncluded || false;
+                    
+                    currentFormalOrder = d.sourceOrderId ? { type: d.sourceOrderType || 'proforma_invoices', id: d.sourceOrderId } : null;
                     
                     const tbody = document.querySelector("#itemTable tbody");
                     tbody.innerHTML = "";
