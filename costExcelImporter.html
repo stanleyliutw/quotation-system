@@ -229,7 +229,7 @@
                 <th width="40" class="center"><input type="checkbox" id="selectAll" checked onchange="toggleAll(this)"></th>
                 <th>檔案名稱</th>
                 <th>專案名稱 / 品名 (A3)</th>
-                <th width="120" class="right">基礎成本 (E20)</th>
+                <th width="140" class="right">基礎成本 (合計列 E 欄)</th>
                 <th width="140" class="center">加成百分比 (%)</th>
                 <th width="140" class="right">最終報價 (單價)</th>
             </tr>
@@ -301,12 +301,47 @@
                 
                 const worksheet = workbook.Sheets[targetSheetName];
                 
-                // 1. 抓取基本資料 (A3, E20)
+                // 1. 抓取基本資料 (A3, 動態搜尋 total 行的 E 欄)
                 const a3Cell = worksheet['A3'];
-                const e20Cell = worksheet['E20'];
-                
                 const spec = a3Cell ? a3Cell.v : '（未找到品名資料）';
-                const cost = e20Cell && !isNaN(e20Cell.v) ? parseFloat(e20Cell.v) : 0;
+
+                let cost = 0;
+                let foundCost = false;
+
+                if (worksheet['!ref']) {
+                    try {
+                        const range = XLSX.utils.decode_range(worksheet['!ref']);
+                        // 搜尋 A 到 D 欄，找出包含 total 或合計的儲存格。
+                        for (let r = range.s.r; r <= range.e.r; r++) {
+                            for (let c = 0; c <= 3; c++) {
+                                const cellAddress = XLSX.utils.encode_cell({ r: r, c: c });
+                                const cell = worksheet[cellAddress];
+                                if (cell && cell.v) {
+                                    const valStr = String(cell.v).toLowerCase().trim();
+                                    if (valStr.includes('total') || valStr.includes('合計')) {
+                                        // 找到合計列後，讀取同一列的 E 欄。
+                                        const eCellAddress = XLSX.utils.encode_cell({ r: r, c: 4 });
+                                        const eCell = worksheet[eCellAddress];
+                                        if (eCell && !isNaN(eCell.v) && eCell.v !== '') {
+                                            cost = parseFloat(eCell.v);
+                                            foundCost = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (foundCost) break;
+                        }
+                    } catch (err) {
+                        console.warn('動態搜尋合計列時發生錯誤，改用 E20 備用值', err);
+                    }
+                }
+
+                // 找不到合計列時，使用原本的 E20 作為備援。
+                if (!foundCost) {
+                    const e20Cell = worksheet['E20'];
+                    cost = e20Cell && !isNaN(e20Cell.v) ? parseFloat(e20Cell.v) : 0;
+                }
 
                 // 2. 抓取模具費用 (G7:L12) - 使用 sheet_to_json 讀取範圍
                 // G7:L12 轉換為座標範圍 (0-indexed)
@@ -482,7 +517,7 @@
         });
         
         localStorage.setItem('importQuoteItems', JSON.stringify(exportItems));
-        const targetUrl = 'quotationV4_firebase.html';
+        const targetUrl = 'https://stanleyliutw.github.io/quotation-system/quotationV4_firebase.html';
         window.open(targetUrl, '_blank');
     }
 </script>
