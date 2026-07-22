@@ -480,6 +480,8 @@
     body.pdf-export-mode #capture-area {
         box-shadow: none !important;
         margin: 0 !important;
+        width: 212mm !important;
+        min-height: 294mm !important;
     }
 
     body.pdf-batch-export-mode #print-all-container {
@@ -490,6 +492,11 @@
         z-index: 99999;
         width: 210mm;
         background: white;
+    }
+
+    body.pdf-batch-export-mode #print-all-container .print-page {
+        width: 212mm !important;
+        min-height: 294mm !important;
     }
 
     @media print {
@@ -1118,7 +1125,7 @@
                 <div class="print-page" style="background: white; width: 210mm; min-height: 297mm; padding: 15mm 18mm; font-family: 'Inter', 'Microsoft JhengHei', sans-serif; font-size: 13px; color: #333; line-height: 1.4; box-sizing: border-box;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3.5px solid #1a2a3a; padding-bottom: 12px; margin-bottom: 25px;">
                         <div style="display: flex; align-items: center; gap: 15px;">
-                            <div style="width: 130px;"><img src="logo.png" alt="銓瑞複材" onerror="this.src='https://via.placeholder.com/140x50?text=TR+Tech'" style="max-width: 100%; height: auto;"></div>
+                            <div style="width: 90px;"><img src="login-logo.png" alt="銓瑞複材" onerror="this.style.display='none'" style="max-width: 100%; height: auto;"></div>
                             <div>
                                 <h1 style="margin: 0; font-size: 22px; color: #1a2a3a; letter-spacing: 0.5px;">銓瑞複材科技股份有限公司</h1>
                                 <p style="margin: 2px 0 0 0; font-size: 12px; color: #666; font-weight: 600;">PRODUCTION SPECIFICATION CONFIRMATION</p>
@@ -1218,12 +1225,27 @@
             };
 
             try {
-                await html2pdf().set(options).from(element).save();
+                const worker = html2pdf().set(options).from(element).toPdf();
+                await worker.get('pdf').then(removeTrailingBlankPdfPages);
+                await worker.save();
                 showStatus('PDF 已下載', '#2ecc71');
             } catch (error) {
                 console.error('PDF 產生失敗', error);
                 showStatus('PDF 產生失敗', '#e74c3c');
                 alert('PDF 產生失敗：' + (error.message || '未知錯誤'));
+            }
+        }
+
+        function removeTrailingBlankPdfPages(pdf) {
+            for (let pageNumber = pdf.internal.getNumberOfPages(); pageNumber > 1; pageNumber--) {
+                const commands = pdf.internal.pages[pageNumber] || [];
+                const transform = commands.find(command => /\scm$/.test(command));
+                if (!transform) break;
+
+                const values = transform.trim().split(/\s+/);
+                const renderedHeight = Number(values[3]);
+                if (!Number.isFinite(renderedHeight) || renderedHeight >= 20) break;
+                pdf.deletePage(pageNumber);
             }
         }
 
