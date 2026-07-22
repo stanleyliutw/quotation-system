@@ -1141,13 +1141,43 @@
                 return;
             }
 
-            localStorage.setItem('pendingProductionSpecs', JSON.stringify({
+            const transferData = {
                 piData: piData,
                 items: items
-            }));
+            };
+            localStorage.setItem('pendingProductionSpecs', JSON.stringify(transferData));
 
-            const mfgUrl = '生產規格確認單V1_firebase.html?from=PI';
-            window.open(mfgUrl, '_blank');
+            openProductionSpecsTransfer(transferData);
+        }
+
+        function openProductionSpecsTransfer(transferData) {
+            const transferId = `pi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const mfgUrl = `生產規格確認單V1_firebase.html?from=PI&transferId=${encodeURIComponent(transferId)}`;
+            const targetOrigin = window.location.origin === 'null' ? '*' : window.location.origin;
+            let mfgWindow = null;
+
+            const handleTransferRequest = (event) => {
+                if ((targetOrigin !== '*' && event.origin !== targetOrigin) || event.source !== mfgWindow) return;
+                if (!event.data || event.data.type !== 'MFG_TRANSFER_READY' || event.data.transferId !== transferId) return;
+
+                mfgWindow.postMessage({
+                    type: 'MFG_TRANSFER_DATA',
+                    transferId: transferId,
+                    payload: transferData
+                }, targetOrigin);
+                window.removeEventListener('message', handleTransferRequest);
+            };
+
+            window.addEventListener('message', handleTransferRequest);
+            mfgWindow = window.open(mfgUrl, '_blank');
+
+            if (!mfgWindow) {
+                window.removeEventListener('message', handleTransferRequest);
+                window.location.href = mfgUrl;
+                return;
+            }
+
+            setTimeout(() => window.removeEventListener('message', handleTransferRequest), 15000);
         }
 
         window.onload = async () => {

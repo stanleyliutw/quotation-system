@@ -530,7 +530,7 @@
             <button class="btn btn-save" onclick="saveToFile()"><span>💾</span> 儲存 JSON 檔</button>
             <button class="btn btn-load" onclick="document.getElementById('loadFile').click()"><span>📂</span> 載入資料</button>
             <input type="file" id="loadFile" style="display:none" onchange="loadFromFile(this)">
-            <button class="btn btn-print" onclick="window.print()"><span>🖨️</span> 列印 PDF</button>
+            <button class="btn btn-print" onclick="printCurrentSpec()"><span>🖨️</span> 列印 PDF</button>
 
             <div id="save-status">
                 <span class="status-dot"></span>
@@ -825,11 +825,30 @@
     <script>
         const LOCAL_STORAGE_KEY = 'mfg_confirmation_data';
         let lastLoadedPIIndex = -1;
+        let receivedPITransfer = null;
+        let piTransferWaitTimer = null;
         const fields = [
             'docId', 'custName', 'projectName', 'reqDate', 'dueDate', 'salesName',
             'prodName', 'drawingId', 'materialSpec', 'orderQty', 'sizeReq', 'surfaceTreat',
             'colorSpec', 'packingReq', 'specialNotes'
         ];
+
+        window.addEventListener('message', (event) => {
+            const expectedOrigin = window.location.origin;
+            if ((expectedOrigin !== 'null' && event.origin !== expectedOrigin) || !event.data || event.data.type !== 'MFG_TRANSFER_DATA') return;
+
+            const expectedTransferId = new URLSearchParams(window.location.search).get('transferId');
+            if (expectedTransferId && event.data.transferId !== expectedTransferId) return;
+            if (!event.data.payload || !Array.isArray(event.data.payload.items)) return;
+
+            receivedPITransfer = event.data.payload;
+            localStorage.setItem('pendingProductionSpecs', JSON.stringify(receivedPITransfer));
+            clearTimeout(piTransferWaitTimer);
+
+            if (document.readyState === 'complete') {
+                checkPIConversion(receivedPITransfer);
+            }
+        });
 
         window.onload = async () => {
             const user = await firebaseAuthReady.catch(() => null);
@@ -851,9 +870,26 @@
             } else {
                 clearForm();
                 document.getElementById('reqDate').valueAsDate = new Date();
-                checkPIConversion();
+                const loadedFromStorage = checkPIConversion();
+                if (!loadedFromStorage) requestPITransfer();
             }
         };
+
+        function requestPITransfer() {
+            const transferId = new URLSearchParams(window.location.search).get('transferId');
+            if (!transferId || !window.opener) {
+                showStatus('找不到 PI 轉換資料', '#e74c3c');
+                return;
+            }
+
+            const targetOrigin = window.location.origin === 'null' ? '*' : window.location.origin;
+            window.opener.postMessage({ type: 'MFG_TRANSFER_READY', transferId: transferId }, targetOrigin);
+            piTransferWaitTimer = setTimeout(() => {
+                if (!receivedPITransfer && !localStorage.getItem('pendingProductionSpecs')) {
+                    showStatus('PI 資料傳送逾時，請回到 PI 重新轉換', '#e74c3c');
+                }
+            }, 5000);
+        }
 
         function clearForm() {
             fields.forEach(id => {
@@ -944,15 +980,15 @@
             } catch (e) { console.error('暫存草稿失敗', e); }
         }
 
-        function checkPIConversion() {
-            const pending = localStorage.getItem('pendingProductionSpecs');
-            if (!pending) return;
+        function checkPIConversion(transferData = null) {
+            const pending = transferData || localStorage.getItem('pendingProductionSpecs');
+            if (!pending) return false;
             try {
-                const data = JSON.parse(pending);
+                const data = typeof pending === 'string' ? JSON.parse(pending) : pending;
                 const helper = document.getElementById('pi-helper');
                 const select = document.getElementById('pi-item-select');
                 const info = document.getElementById('pi-info');
-                if (!data || !data.items || data.items.length === 0) return;
+                if (!data || !data.items || data.items.length === 0) return false;
                 info.innerText = `來源單據：${data.piData.piId} (${data.piData.custName})`;
                 select.innerHTML = '<option value="">-- 請選擇品項 --</option>';
                 data.items.forEach((item, index) => {
@@ -966,7 +1002,12 @@
                     select.value = "0";
                     loadPIItem(0);
                 }
-            } catch (e) { console.error("PI 解析錯誤", e); }
+                return true;
+            } catch (e) {
+                console.error("PI 解析錯誤", e);
+                showStatus('PI 資料格式錯誤', '#e74c3c');
+                return false;
+            }
         }
 
         function loadPIItem(index) {
@@ -1105,10 +1146,44 @@
 
             requestAnimationFrame(() => {
                 setTimeout(() => {
-                    window.print();
-                    document.body.classList.remove('print-all-mode');
-                    container.innerHTML = '';
+                    runPrintPreview(() => {
+                        document.body.classList.remove('print-all-mode');
+                        container.innerHTML = '';
+                    });
                 }, 300);
+            });
+        }
+
+        function printCurrentSpec() {
+            saveCurrentItemToPending();
+            document.body.classList.remove('print-all-mode');
+            document.getElementById('print-all-container').innerHTML = '';
+            runPrintPreview();
+        }
+
+        function runPrintPreview(cleanup) {
+            let cleanedUp = false;
+            const finish = () => {
+                if (cleanedUp) return;
+                cleanedUp = true;
+                window.removeEventListener('afterprint', finish);
+                if (typeof cleanup === 'function') cleanup();
+                showStatus('列印預覽已關閉', '#2ecc71');
+            };
+
+            window.addEventListener('afterprint', finish, { once: true });
+            showStatus('正在開啟列印預覽...', '#3498db');
+
+            requestAnimationFrame(() => {
+                try {
+                    window.focus();
+                    window.print();
+                    setTimeout(finish, 60000);
+                } catch (error) {
+                    console.error('無法開啟列印預覽', error);
+                    finish();
+                    alert('無法開啟列印預覽，請使用瀏覽器選單的「列印」功能。');
+                }
             });
         }
 
