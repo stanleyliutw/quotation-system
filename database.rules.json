@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "customers": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}
