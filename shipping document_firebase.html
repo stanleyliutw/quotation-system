@@ -119,6 +119,22 @@
             min-width: 0;
         }
 
+        .company-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .company-name {
+            color: var(--primary);
+            font-size: 21px;
+            font-weight: 800;
+            line-height: 1.35;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
         .company-info h1 { 
             margin: 0 0 8px 0; 
             color: var(--primary); 
@@ -132,7 +148,7 @@
             height: 88px;
             object-fit: cover;
             border-radius: 50%;
-            margin: 0 0 10px 0;
+            margin: 0;
         }
         .company-info input { 
             display: block; 
@@ -416,7 +432,10 @@
     <div class="page" id="captureArea">
         <div class="header">
             <div class="company-info">
-                <img class="company-logo" src="login-logo.png" alt="銓瑞複材科技股份有限公司 Logo">
+                <div class="company-brand">
+                    <img class="company-logo" src="login-logo.png" alt="銓瑞複材科技股份有限公司 Logo">
+                    <div class="company-name">銓瑞複材科技股份有限公司</div>
+                </div>
                 <input type="text" id="compAddr" value="地址：429台中市神岡區中山路989巷2號">
                 <input type="text" id="compTel" value="電話：(04) 25622559  傳真：(04) 25622639">
                 <input type="text" id="compTaxID" value="統一編號：82771130">
