@@ -108,9 +108,15 @@
         .header { 
             display: flex; 
             justify-content: space-between; 
+            gap: 8mm;
             border-bottom: 2px solid var(--primary); 
             padding-bottom: 15px; 
             margin-bottom: 20px; 
+        }
+
+        .company-info {
+            flex: 1 1 108mm;
+            min-width: 0;
         }
 
         .company-info h1 { 
@@ -139,7 +145,10 @@
             outline: none;
         }
         
-        .doc-identity { text-align: right; }
+        .doc-identity {
+            flex: 0 0 62mm;
+            text-align: right;
+        }
         .doc-identity h2 { 
             margin: 0 0 10px 0; 
             font-size: 28px; 
