@@ -67,6 +67,11 @@
             color: var(--success);
         }
 
+        .connection-status.error {
+            background: #fdecec;
+            color: var(--danger);
+        }
+
         /* 頂部功能控制面板 */
         .control-panel {
             background: var(--card-bg);
@@ -287,6 +292,8 @@
     </style>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 </head>
 <body>
@@ -423,7 +430,7 @@
             measurementId: "G-GKJQ6NR9NV"
         };
 
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
         let customerDatabase = {};  
@@ -431,18 +438,19 @@
         let isEditMode = false;     
 
         // --- 2. 系統初始化 ---
-        window.onload = () => {
+        window.onload = async () => {
+            const user = await firebaseAuthReady.catch(() => null);
+            if (!user) return;
+
             db.ref("customers").on("value", (snapshot) => {
                 const data = snapshot.val();
                 customerDatabase = data ? data : {};
                 renderTable();
-                
+
                 document.getElementById('connStatus').innerText = "🟢 雲端即時連線中";
                 document.getElementById('connStatus').className = "connection-status online";
             }, (error) => {
-                console.error(error);
-                document.getElementById('connStatus').innerText = "🔴 連線失敗";
-                document.getElementById('connStatus').className = "connection-status";
+                handleDatabaseReadError(error);
             });
 
             document.getElementById('searchInput').addEventListener('input', renderTable);
@@ -450,6 +458,27 @@
             
             prepareNewCustomer();
         };
+
+        function handleDatabaseReadError(error) {
+            console.error("Firebase 客戶資料讀取失敗:", error);
+
+            const isPermissionDenied = error && error.code === "PERMISSION_DENIED";
+            const status = document.getElementById('connStatus');
+            status.innerText = isPermissionDenied ? "🔴 Firebase 權限已拒絕" : "🔴 雲端連線失敗";
+            status.className = "connection-status error";
+            status.title = error && error.message ? error.message : "無法讀取 Firebase 客戶資料";
+
+            document.getElementById('customerCount').innerText = "總計: -- 筆";
+            document.getElementById('customerTableBody').innerHTML = `
+                <tr>
+                    <td colspan="4" style="text-align:center;color:var(--danger);padding:40px;line-height:1.8;">
+                        <strong>${isPermissionDenied ? "Firebase Database Rules 已拒絕讀取" : "目前無法連接雲端資料庫"}</strong><br>
+                        <span style="color:var(--text-muted);">
+                            ${isPermissionDenied ? "請至 Firebase Console 更新 Realtime Database Rules 後再重新整理。" : "請確認網路連線或稍後重新整理。"}
+                        </span>
+                    </td>
+                </tr>`;
+        }
 
         // --- 3. 渲染清單 ---
         function renderTable() {

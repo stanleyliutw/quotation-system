@@ -560,6 +560,8 @@
 
     <!-- Firebase SDK 引入與整合 (Compat 模式，相容本機 file:// 協議免 CORS 限制) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <script>
@@ -574,7 +576,7 @@
         };
 
         // 初始化 Firebase
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const rtdb = firebase.database();
         let customerCache = [];
@@ -1148,7 +1150,10 @@
             window.open(mfgUrl, '_blank');
         }
 
-        window.onload = () => {
+        window.onload = async () => {
+            const user = await firebaseAuthReady.catch(() => null);
+            if (!user) return;
+
             injectCustomerControls();
             const today = new Date();
             document.getElementById('currentDate').valueAsDate = today;
