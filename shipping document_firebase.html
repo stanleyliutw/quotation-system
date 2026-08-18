@@ -832,17 +832,42 @@
 
         let cloudDocuments = [];
 
+        function getCloudDocumentTime(d) {
+            const value = d.updatedAt || d.createdAt || d.shipDate || '';
+            if (value && typeof value.toDate === 'function') {
+                return value.toDate().getTime();
+            }
+            if (value && typeof value.seconds === 'number') {
+                return value.seconds * 1000;
+            }
+            const time = new Date(value).getTime();
+            return Number.isNaN(time) ? 0 : time;
+        }
+
+        function formatCloudDocumentTime(d) {
+            const value = d.updatedAt || d.createdAt;
+            if (!value) return '舊資料（無更新時間）';
+            const date = typeof value.toDate === 'function'
+                ? value.toDate()
+                : (typeof value.seconds === 'number' ? new Date(value.seconds * 1000) : new Date(value));
+            return Number.isNaN(date.getTime()) ? '無資料' : date.toLocaleString('zh-TW');
+        }
+
         window.openHistoryModal = async function() {
             document.getElementById('fbHistoryModal').style.display = 'flex';
             const listContainer = document.getElementById('fbHistoryList');
             listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;">讀取中...</td></tr>';
+            document.getElementById('fbSearchInput').value = '';
 
             try {
-                const querySnapshot = await db.collection("shipping_documents").orderBy("updatedAt", "desc").get();
+                // 不使用 orderBy：Firestore 會排除沒有 updatedAt 欄位的舊文件。
+                // 先取回整個集合，再於前端排序，才能顯示所有新舊單據。
+                const querySnapshot = await db.collection("shipping_documents").get();
                 cloudDocuments = [];
                 querySnapshot.forEach((doc) => {
-                    cloudDocuments.push(doc.data());
+                    cloudDocuments.push({ ...doc.data(), __docId: doc.id });
                 });
+                cloudDocuments.sort((a, b) => getCloudDocumentTime(b) - getCloudDocumentTime(a));
                 renderHistoryList(cloudDocuments);
             } catch (error) {
                 console.error("Error fetching docs: ", error);
@@ -860,17 +885,37 @@
             listContainer.innerHTML = '';
             docs.forEach(d => {
                 const tr = document.createElement('tr');
-                const lastUpdate = d.updatedAt ? new Date(d.updatedAt).toLocaleString('zh-TW') : '無資料';
-                tr.innerHTML = `
-                    <td><strong>${d.orderId}</strong></td>
-                    <td>${d.custName || '未命名'}</td>
-                    <td>${d.shipDate || '無'}</td>
-                    <td style="font-size:12px;color:var(--text-muted);">${lastUpdate}</td>
-                    <td>
-                        <button class="fb-btn-load" onclick="loadCloudDocument('${d.orderId}')">載入</button>
-                        <button class="fb-btn-delete" onclick="deleteCloudDocument('${d.orderId}')">刪除</button>
-                    </td>
-                `;
+                const displayOrderId = d.orderId || d.__docId;
+                const values = [displayOrderId, d.custName || '未命名', d.shipDate || '無'];
+                values.forEach((value, index) => {
+                    const td = document.createElement('td');
+                    if (index === 0) {
+                        const strong = document.createElement('strong');
+                        strong.textContent = value;
+                        td.appendChild(strong);
+                    } else {
+                        td.textContent = value;
+                    }
+                    tr.appendChild(td);
+                });
+
+                const updatedCell = document.createElement('td');
+                updatedCell.style.fontSize = '12px';
+                updatedCell.style.color = 'var(--text-muted)';
+                updatedCell.textContent = formatCloudDocumentTime(d);
+                tr.appendChild(updatedCell);
+
+                const actionCell = document.createElement('td');
+                const loadButton = document.createElement('button');
+                loadButton.className = 'fb-btn-load';
+                loadButton.textContent = '載入';
+                loadButton.addEventListener('click', () => loadCloudDocument(d.__docId));
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'fb-btn-delete';
+                deleteButton.textContent = '刪除';
+                deleteButton.addEventListener('click', () => deleteCloudDocument(d.__docId, displayOrderId));
+                actionCell.append(loadButton, deleteButton);
+                tr.appendChild(actionCell);
                 listContainer.appendChild(tr);
             });
         }
@@ -879,6 +924,7 @@
             const queryVal = document.getElementById('fbSearchInput').value.toLowerCase();
             const filtered = cloudDocuments.filter(d => 
                 (d.orderId && d.orderId.toLowerCase().includes(queryVal)) ||
+                (d.__docId && d.__docId.toLowerCase().includes(queryVal)) ||
                 (d.custName && d.custName.toLowerCase().includes(queryVal))
             );
             renderHistoryList(filtered);
@@ -898,7 +944,7 @@
                     if(d.compTaxID) document.getElementById('compTaxID').value = d.compTaxID;
 
                     document.getElementById('shipDate').value = d.shipDate || "";
-                    document.getElementById('orderId').value = d.orderId || "";
+                    document.getElementById('orderId').value = d.orderId || docSnap.id;
                     document.getElementById('poId').value = d.poId || "";
 
                     document.getElementById('custName').value = d.custName || "";
@@ -951,8 +997,8 @@
             }
         };
 
-        window.deleteCloudDocument = async function(id) {
-            if (confirm(`確定要刪除雲端單據 ${id} 嗎？此操作無法還原。`)) {
+        window.deleteCloudDocument = async function(id, displayId = id) {
+            if (confirm(`確定要刪除雲端單據 ${displayId} 嗎？此操作無法還原。`)) {
                 showToast("正在刪除...", "#e74c3c");
                 try {
                     await db.collection("shipping_documents").doc(id).delete();
