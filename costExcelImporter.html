@@ -304,73 +304,81 @@
                 
                 const worksheet = workbook.Sheets[targetSheetName];
                 
-                // 1. 抓取基本資料 (A3, 動態搜尋 total 行的 E 欄)
-                const a3Cell = worksheet['A3'];
-                const spec = a3Cell ? a3Cell.v : '（未找到品名資料）';
+                // 1. 讀取基本資料。新版 Summary 將總成本移到 Total 列的 B 欄，
+                //    舊版則可能在 E 欄；以下依標題/合計列自動判斷，不再綁死座標。
+                const sheetRange = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
+                const cellValue = (r, c) => {
+                    const cell = worksheet[XLSX.utils.encode_cell({ r, c })];
+                    return cell ? cell.v : '';
+                };
+                const isNumber = value => value !== '' && value !== null && value !== undefined && !isNaN(value);
+                const text = value => String(value || '').toLowerCase().replace(/\s+/g, '');
 
+                let spec = cellValue(2, 0) || '（未找到品名資料）';
                 let cost = 0;
-                let foundCost = false;
-
-                if (worksheet['!ref']) {
-                    try {
-                        const range = XLSX.utils.decode_range(worksheet['!ref']);
-                        // 搜尋 A 到 D 欄，找出包含 total 或合計的儲存格。
-                        for (let r = range.s.r; r <= range.e.r; r++) {
-                            for (let c = 0; c <= 3; c++) {
-                                const cellAddress = XLSX.utils.encode_cell({ r: r, c: c });
-                                const cell = worksheet[cellAddress];
-                                if (cell && cell.v) {
-                                    const valStr = String(cell.v).toLowerCase().trim();
-                                    if (valStr.includes('total') || valStr.includes('合計')) {
-                                        // 找到合計列後，讀取同一列的 E 欄。
-                                        const eCellAddress = XLSX.utils.encode_cell({ r: r, c: 4 });
-                                        const eCell = worksheet[eCellAddress];
-                                        if (eCell && !isNaN(eCell.v) && eCell.v !== '') {
-                                            cost = parseFloat(eCell.v);
-                                            foundCost = true;
-                                            break;
-                                        }
-                                    }
+                let costSource = '';
+                if (sheetRange) {
+                    for (let r = sheetRange.s.r; r <= sheetRange.e.r; r++) {
+                        let totalLabel = false;
+                        for (let c = sheetRange.s.c; c <= Math.min(sheetRange.e.c, 5); c++) {
+                            const label = text(cellValue(r, c));
+                            if (label === 'total' || label.includes('合計')) totalLabel = true;
+                        }
+                        if (totalLabel) {
+                            // 新版 B、舊版 E，另支援 Summary 常見的 H 預估產品成本。
+                            for (const c of [1, 4, 7, 2, 3, 5, 6]) {
+                                const value = cellValue(r, c);
+                                if (isNumber(value)) {
+                                    cost = parseFloat(value);
+                                    costSource = XLSX.utils.encode_cell({ r, c });
+                                    break;
                                 }
                             }
-                            if (foundCost) break;
                         }
-                    } catch (err) {
-                        console.warn('動態搜尋合計列時發生錯誤，改用 E20 備用值', err);
+                        if (costSource) break;
+                    }
+                }
+                if (!costSource) {
+                    for (const address of ['E20', 'B3', 'H3']) {
+                        const value = worksheet[address] ? worksheet[address].v : '';
+                        if (isNumber(value)) { cost = parseFloat(value); costSource = address; break; }
                     }
                 }
 
-                // 找不到合計列時，使用原本的 E20 作為備援。
-                if (!foundCost) {
-                    const e20Cell = worksheet['E20'];
-                    cost = e20Cell && !isNaN(e20Cell.v) ? parseFloat(e20Cell.v) : 0;
-                }
-
-                // 2. 抓取模具費用 (G7:L12) - 使用 sheet_to_json 讀取範圍
-                // G7:L12 轉換為座標範圍 (0-indexed)
-                // G是第6欄(從0開始)，L是第11欄。 7是第6列，12是第11列。
+                // 2. 自動找出模具費用表。新版是 G8:K13（Tool/價格/數量/總價/備註），
+                //    舊版 G7:L12；依 Tool 標題列與實際資料範圍判斷。
                 let toolingData = null;
+                let toolingSource = '';
                 try {
-                    // 使用 header: 1 代表回傳二維陣列
-                    const rawRange = XLSX.utils.sheet_to_json(worksheet, { header: 1, range: "G7:L12", defval: "" });
-                    
-                    // 檢查是否全空
-                    let hasData = false;
-                    for (let row of rawRange) {
-                        for (let cell of row) {
-                            if (cell !== undefined && cell !== null && String(cell).trim() !== "") {
-                                hasData = true;
-                                break;
+                    if (sheetRange) {
+                        let headerRow = -1, startCol = -1, endCol = -1, lastRow = -1;
+                        for (let r = sheetRange.s.r; r <= sheetRange.e.r; r++) {
+                            for (let c = sheetRange.s.c; c <= sheetRange.e.c; c++) {
+                                if (text(cellValue(r, c)) === 'tool' || text(cellValue(r, c)).includes('模具')) {
+                                    headerRow = r; startCol = c; break;
+                                }
+                            }
+                            if (headerRow >= 0) break;
+                        }
+                        if (headerRow >= 0) {
+                            for (let c = startCol; c <= sheetRange.e.c; c++) {
+                                if (String(cellValue(headerRow, c)).trim() !== '') endCol = c;
+                                else if (endCol >= startCol && c > endCol + 1) break;
+                            }
+                            endCol = Math.max(endCol, startCol + 4);
+                            for (let r = headerRow; r <= sheetRange.e.r; r++) {
+                                if (Array.from({length: endCol - startCol + 1}, (_, i) => cellValue(r, startCol + i))
+                                    .some(value => String(value).trim() !== '')) lastRow = r;
+                            }
+                            if (lastRow >= headerRow) {
+                                const range = XLSX.utils.encode_range({ s: { r: headerRow, c: startCol }, e: { r: lastRow, c: endCol } });
+                                toolingData = XLSX.utils.sheet_to_json(worksheet, { header: 1, range, defval: '' });
+                                toolingSource = range;
                             }
                         }
-                        if (hasData) break;
-                    }
-                    
-                    if (hasData) {
-                        toolingData = rawRange;
                     }
                 } catch(err) {
-                    console.warn("無法解析 G7:L12 範圍", err);
+                    console.warn('無法自動解析模具費用範圍', err);
                 }
 
                 parsedData.push({
@@ -380,7 +388,9 @@
                     cost: cost,
                     markup: 20,
                     selected: true,
-                    toolingData: toolingData // 儲存模具資料供預覽
+                    toolingData: toolingData, // 儲存模具資料供預覽
+                    toolingSource: toolingSource,
+                    costSource: costSource
                 });
                 
                 resolve();
@@ -432,10 +442,10 @@
                 const card = document.createElement('div');
                 card.className = 'tooling-card';
                 
-                // 表頭顯示專案名稱 (A3)
+                // 表頭顯示專案名稱
                 const header = document.createElement('h3');
                 header.className = 'tooling-header';
-                header.innerHTML = `🛠️ 模具費用參考：${item.spec} <span style="font-size:12px; color:#999; font-weight:normal">(資料來源: ${item.fileName} G7-L12)</span>`;
+                header.innerHTML = `🛠️ 模具費用參考：${item.spec} <span style="font-size:12px; color:#999; font-weight:normal">(資料來源: ${item.fileName} ${item.toolingSource || '自動偵測'})</span>`;
                 card.appendChild(header);
                 
                 // 建立表格
@@ -445,8 +455,8 @@
                 
                 item.toolingData.forEach(row => {
                     const tr = document.createElement('tr');
-                    // G 到 L 共 6 欄 (如果因合併儲存格導致陣列長度不足，補齊6欄)
-                    for (let i = 0; i < 6; i++) {
+                    // 保留最多 6 欄，兼容舊版六欄與新版五欄格式。
+                    for (let i = 0; i < Math.max(5, row.length, 6); i++) {
                         const td = document.createElement('td');
                         const val = row[i];
                         if (val !== undefined && val !== null && val !== "") {
