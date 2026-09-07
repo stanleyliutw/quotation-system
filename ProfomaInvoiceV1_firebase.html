@@ -791,17 +791,37 @@
 
         let cloudDocuments = [];
 
+        function getHistoryDocumentTime(d) {
+            const value = d.updatedAt || d.createdAt || d.date || '';
+            if (value && typeof value.toDate === 'function') return value.toDate().getTime();
+            if (value && typeof value.seconds === 'number') return value.seconds * 1000;
+            const time = new Date(value).getTime();
+            return Number.isNaN(time) ? 0 : time;
+        }
+
+        function formatHistoryDocumentTime(d) {
+            const value = d.updatedAt || d.createdAt;
+            if (!value) return '舊資料（無更新時間）';
+            const date = typeof value.toDate === 'function'
+                ? value.toDate()
+                : (typeof value.seconds === 'number' ? new Date(value.seconds * 1000) : new Date(value));
+            return Number.isNaN(date.getTime()) ? '無資料' : date.toLocaleString('zh-TW');
+        }
+
         window.openHistoryModal = async function() {
             document.getElementById('fbHistoryModal').style.display = 'flex';
             const listContainer = document.getElementById('fbHistoryList');
             listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;">讀取中...</td></tr>';
+            document.getElementById('fbSearchInput').value = '';
 
             try {
-                const querySnapshot = await db.collection("proforma_invoices").orderBy("updatedAt", "desc").get();
+                // 不使用 orderBy，確保沒有 updatedAt 的舊單據也會顯示。
+                const querySnapshot = await db.collection("proforma_invoices").get();
                 cloudDocuments = [];
                 querySnapshot.forEach((doc) => {
-                    cloudDocuments.push(doc.data());
+                    cloudDocuments.push({ ...doc.data(), __docId: doc.id });
                 });
+                cloudDocuments.sort((a, b) => getHistoryDocumentTime(b) - getHistoryDocumentTime(a));
                 renderHistoryList(cloudDocuments);
             } catch (error) {
                 console.error("Error fetching docs: ", error);
@@ -819,15 +839,16 @@
             listContainer.innerHTML = '';
             docs.forEach(d => {
                 const tr = document.createElement('tr');
-                const lastUpdate = d.updatedAt ? new Date(d.updatedAt).toLocaleString('zh-TW') : '無資料';
+                const displayId = d.piId || d.__docId;
+                const lastUpdate = formatHistoryDocumentTime(d);
                 tr.innerHTML = `
-                    <td><strong>${d.piId}</strong></td>
+                    <td><strong>${displayId}</strong></td>
                     <td>${d.custName || '未命名'}</td>
                     <td>${d.date || '無'}</td>
                     <td style="font-size:12px;color:var(--text-light);">${lastUpdate}</td>
                     <td>
-                        <button class="fb-btn-load" onclick="loadCloudDocument('${d.piId}')">載入</button>
-                        <button class="fb-btn-delete" onclick="deleteCloudDocument('${d.piId}')">刪除</button>
+                        <button class="fb-btn-load" onclick="loadCloudDocument('${d.__docId}')">載入</button>
+                        <button class="fb-btn-delete" onclick="deleteCloudDocument('${d.__docId}')">刪除</button>
                     </td>
                 `;
                 listContainer.appendChild(tr);
@@ -838,6 +859,7 @@
             const queryVal = document.getElementById('fbSearchInput').value.toLowerCase();
             const filtered = cloudDocuments.filter(d => 
                 (d.piId && d.piId.toLowerCase().includes(queryVal)) ||
+                (d.__docId && d.__docId.toLowerCase().includes(queryVal)) ||
                 (d.custName && d.custName.toLowerCase().includes(queryVal))
             );
             renderHistoryList(filtered);

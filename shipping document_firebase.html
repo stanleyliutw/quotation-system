@@ -771,12 +771,13 @@
             docs.forEach(function(d) {
                 const tr = document.createElement('tr');
                 const docDate = d.date || d.currentDate || '';
-                const piId = d.piId || '';
+                const piId = d.piId || d.__docId || '';
+                const documentId = d.__docId || piId;
                 tr.innerHTML = '<td><strong>' + piId + '</strong></td>' +
                     '<td>' + (d.quoteRef || 'N/A') + '</td>' +
                     '<td>' + (d.custName || 'N/A') + '</td>' +
                     '<td>' + (docDate || 'N/A') + '</td>' +
-                    '<td><button class="fb-btn-load" onclick="loadFormalOrderDocument(\'' + piId + '\')">Load</button></td>';
+                    '<td><button class="fb-btn-load" onclick="loadFormalOrderDocument(\'' + documentId + '\')">Load</button></td>';
                 listContainer.appendChild(tr);
             });
         }
@@ -788,11 +789,13 @@
             document.getElementById('formalOrderSearch').value = '';
 
             try {
-                const querySnapshot = await db.collection('proforma_invoices').orderBy('updatedAt', 'desc').get();
+                // 不使用 orderBy，確保沒有 updatedAt 的舊 PI 也能被選取。
+                const querySnapshot = await db.collection('proforma_invoices').get();
                 formalOrderDocuments = [];
                 querySnapshot.forEach(function(doc) {
-                    formalOrderDocuments.push(doc.data());
+                    formalOrderDocuments.push({ ...doc.data(), __docId: doc.id });
                 });
+                formalOrderDocuments.sort((a, b) => getCloudDocumentTime(b) - getCloudDocumentTime(a));
                 renderFormalOrderList(formalOrderDocuments);
             } catch (error) {
                 console.error('Error fetching formal orders:', error);
@@ -804,6 +807,7 @@
             const queryVal = document.getElementById('formalOrderSearch').value.toLowerCase();
             const filtered = formalOrderDocuments.filter(function(d) {
                 return (d.piId && d.piId.toLowerCase().includes(queryVal)) ||
+                    (d.__docId && d.__docId.toLowerCase().includes(queryVal)) ||
                     (d.quoteRef && d.quoteRef.toLowerCase().includes(queryVal)) ||
                     (d.custName && d.custName.toLowerCase().includes(queryVal));
             });

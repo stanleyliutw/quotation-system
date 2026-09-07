@@ -766,17 +766,28 @@
 
         let cloudDocuments = [];
 
+        function getHistoryDocumentTime(d) {
+            const value = d.updatedAt || d.createdAt || d.reqDate || '';
+            if (value && typeof value.toDate === 'function') return value.toDate().getTime();
+            if (value && typeof value.seconds === 'number') return value.seconds * 1000;
+            const time = new Date(value).getTime();
+            return Number.isNaN(time) ? 0 : time;
+        }
+
         window.openHistoryModal = async function() {
             document.getElementById('fbHistoryModal').style.display = 'flex';
             const listContainer = document.getElementById('fbHistoryList');
             listContainer.innerHTML = '<tr><td colspan="5" style="text-align:center;">讀取中...</td></tr>';
+            document.getElementById('fbSearchInput').value = '';
 
             try {
-                const querySnapshot = await db.collection("production_specs").orderBy("updatedAt", "desc").get();
+                // 不使用 orderBy，確保沒有 updatedAt 的舊單據也會顯示。
+                const querySnapshot = await db.collection("production_specs").get();
                 cloudDocuments = [];
                 querySnapshot.forEach((doc) => {
-                    cloudDocuments.push(doc.data());
+                    cloudDocuments.push({ ...doc.data(), __docId: doc.id });
                 });
+                cloudDocuments.sort((a, b) => getHistoryDocumentTime(b) - getHistoryDocumentTime(a));
                 renderHistoryList(cloudDocuments);
             } catch (error) {
                 console.error("Error fetching docs: ", error);
@@ -794,14 +805,15 @@
             listContainer.innerHTML = '';
             docs.forEach(d => {
                 const tr = document.createElement('tr');
+                const displayId = d.docId || d.__docId;
                 tr.innerHTML = `
-                    <td><strong>${d.docId}</strong></td>
+                    <td><strong>${displayId}</strong></td>
                     <td>${d.custName || '無'}</td>
                     <td>${d.reqDate || '無'}</td>
                     <td>${(d.prodName || '無').substring(0, 20)}</td>
                     <td>
-                        <button class="fb-btn-load" onclick="loadCloudDocument('${d.docId}')">載入</button>
-                        <button class="fb-btn-delete" onclick="deleteCloudDocument('${d.docId}')">刪除</button>
+                        <button class="fb-btn-load" onclick="loadCloudDocument('${d.__docId}')">載入</button>
+                        <button class="fb-btn-delete" onclick="deleteCloudDocument('${d.__docId}')">刪除</button>
                     </td>
                 `;
                 listContainer.appendChild(tr);
@@ -812,6 +824,7 @@
             const queryVal = document.getElementById('fbSearchInput').value.toLowerCase();
             const filtered = cloudDocuments.filter(d => 
                 (d.docId && d.docId.toLowerCase().includes(queryVal)) ||
+                (d.__docId && d.__docId.toLowerCase().includes(queryVal)) ||
                 (d.custName && d.custName.toLowerCase().includes(queryVal)) ||
                 (d.prodName && d.prodName.toLowerCase().includes(queryVal))
             );
