@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>內部分機查詢</title>
+<style>body{font:16px system-ui;color:#153438;background:#f1f5f5;margin:0}main{max-width:760px;margin:32px auto;padding:24px;background:white;border-radius:14px}label{display:block;margin:20px 0 8px}input,button{font:inherit;padding:8px;max-width:100%;box-sizing:border-box}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #d7e3e2;overflow-wrap:anywhere}a{color:#09665b}</style>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
+<main><a href="index.html">返回工作表單及流程參考系統</a><h1>內部分機查詢</h1>
+<p>選取最新版公司通訊錄 Excel。檔案在這個瀏覽器分頁內處理。</p>
+<label for="file">通訊錄 Excel</label><input id="file" type="file" accept=".xlsx">
+<label for="query">姓名或 Email</label><input id="query" type="search" disabled>
+<p id="status" role="status">請先選取通訊錄。</p>
+<table hidden id="results"><thead><tr><th>姓名</th><th>Email</th><th>分機</th></tr></thead><tbody></tbody></table></main>
+<script>
+const file=document.getElementById('file');
+const query=document.getElementById('query');
+const statusLine=document.getElementById('status');
+const results=document.getElementById('results');
+const body=results.tBodies[0];
+let entries=[];
+let revision=0;
+function search(){
+ const key=query.value.trim().toLowerCase();
+ const matches=key?entries.filter(([name,email])=>name.toLowerCase().includes(key)||email.toLowerCase().includes(key)):[];
+ body.replaceChildren(...matches.slice(0,100).map(values=>{
+  const row=document.createElement('tr');
+  values.forEach(value=>{row.insertCell().textContent=value});
+  return row;
+ }));
+ results.hidden=!matches.length;
+ statusLine.textContent=key?(matches.length?'找到 '+matches.length+' 筆'+(matches.length>100?'，顯示前 100 筆':''):'查無符合資料'):'已載入 '+entries.length+' 筆，請輸入姓名或 Email。';
+}
+query.addEventListener('input',search);
+file.addEventListener('change',async()=>{
+ const selected=file.files[0];
+ if(!selected)return;
+ const request=++revision;
+ statusLine.textContent='讀取中…';
+ try{
+  const bytes=await selected.arrayBuffer();
+  if(request!==revision)return;
+  const workbook=XLSX.read(bytes);
+  const next=new Map();
+  for(const sheet of workbook.SheetNames){
+   const rows=XLSX.utils.sheet_to_json(workbook.Sheets[sheet],{header:1,raw:false,defval:''});
+   let columns=null;
+   for(const row of rows){
+    const values=row.map(value=>String(value).trim());
+    const headers=values.map(value=>value.toLowerCase().replace(/[\s_-]/g,''));
+    const name=headers.findIndex(x=>/^(姓名|員工姓名|中文姓名|人員|員工|name)$/.test(x));
+    const email=headers.findIndex(x=>/email|電子郵件|電子信箱|郵箱/.test(x));
+    const ext=headers.findIndex(x=>/分機|^ext\.?$|^extension$/.test(x));
+    if(ext>=0&&(name>=0||email>=0)){columns=[name,email,ext];continue}
+    if(!columns)continue;
+    const entry=columns.map(index=>values[index]||'');
+    if(entry[2]&&(entry[0]||entry[1]))next.set(JSON.stringify(entry),entry);
+   }
+  }
+  if(!next.size)throw Error('找不到包含姓名或 Email 及分機的資料欄位。');
+  entries=[...next.values()];
+  query.disabled=false;
+  search();
+ }catch(error){
+  statusLine.textContent='無法載入 Excel。'+(error instanceof ReferenceError?'Excel 讀取元件未載入，請重新整理頁面。':'請檢查檔案及姓名、Email、分機欄位。')+(entries.length?' 目前仍可查詢上次載入的版本。':'');
+ }finally{if(request===revision)file.value=''}
+});
+</script></html>
