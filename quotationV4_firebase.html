@@ -570,7 +570,6 @@
 
         <button class="btn btn-ics" onclick="generateICS()">📅 加入日曆 (ICS)</button>
         <button class="btn btn-print" onclick="window.print()">🖨️ 列印 A4 PDF</button>
-        <button class="btn" onclick="convertToPI()" style="background: #e91e63; color: white;">📄 轉換為正式訂單 (PI)</button>
     </div>
 
     <div class="page">
@@ -1420,35 +1419,6 @@
         }
 
         // 轉換為 PI
-        function convertToPI() {
-            const items = [];
-            document.querySelectorAll("#quoteBody tr").forEach(row => {
-                items.push({
-                    spec: row.querySelector(".spec").value,
-                    qty: row.querySelector(".qty").value,
-                    unit: row.querySelector(".unit").value,
-                    price: row.querySelector(".price").value
-                });
-            });
-
-            const data = {
-                quoteId: document.getElementById('quoteId').value,
-                date: document.getElementById('currentDate').value,
-                custName: document.getElementById('custName').value,
-                custContact: document.getElementById('custContact').value,
-                custTel: document.getElementById('custTel').value,
-                custEmail: document.getElementById('custEmail').value,
-                custAddr: document.getElementById('custAddr').value,
-                notes: document.getElementById('notesArea').innerText,
-                items: items,
-                attachments: uploadedAttachments
-            };
-
-            localStorage.setItem('pendingPI', JSON.stringify(data));
-            const piUrl = 'ProfomaInvoiceV1_firebase.html';
-            window.open(piUrl, '_blank');
-        }
-
         function initResizableColumns() {
             const table = document.getElementById("quoteTable");
             const cols = table.querySelectorAll("thead th");
